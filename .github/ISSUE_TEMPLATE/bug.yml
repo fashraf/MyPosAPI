@@ -1,0 +1,34 @@
+name: Bug (QA issue)
+description: One problem found in testing. Claude does the RCA and the fix.
+title: "[DASH-MAJ-00] Short title of the problem"
+labels: ["bug", "qa"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: ["Major - blocks a sale, money, legal or data", "Moderate - wrong behaviour, workaround exists", "Minor - wording, layout, polish"]
+    validations: { required: true }
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      placeholder: "Staging · POS · 360×720 phone · cashier@lazeez.sa"
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: One or two sentences, plus steps if needed.
+      placeholder: "At the 360×720 POS viewport the bottom navigation covers the Charge button."
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot / video
+      description: Drag images here.

@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+publish/
+.vs/
+*.user
+**/appsettings.Local.json
+**/appsettings.Production.json
+*.pfx
+*.key
+*.pem

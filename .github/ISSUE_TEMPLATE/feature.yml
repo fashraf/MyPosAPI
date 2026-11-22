@@ -1,0 +1,17 @@
+name: Feature request
+description: Something new for Claude to build.
+title: "[FEAT] "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want?
+      placeholder: "Cashier can split a bill between 2–4 people at checkout."
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes:
+      label: How will you check it's done?
+      placeholder: "On staging: open an order of SAR 100, split 3 ways, each pays 33.33/33.33/33.34, three receipts print."
+    validations: { required: true }
