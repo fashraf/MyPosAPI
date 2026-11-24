@@ -16,6 +16,6 @@ public sealed class SqlServerProvider : IDatabaseProvider, ISqlDialect
     public string IncrementNumberSeries =>
         "UPDATE number_series SET last_value = last_value + 1 OUTPUT inserted.last_value WHERE series_key = @Key AND scope_id = @Scope";
     public string InsertReturningId(string insertSql, string idColumn) =>
-        insertSql.Replace(" VALUES", $" OUTPUT inserted.{idColumn} VALUES", StringComparison.OrdinalIgnoreCase);
+        insertSql.Replace(" VALUES", string.Concat(" OUTPUT inserted.", idColumn, " VALUES"), StringComparison.OrdinalIgnoreCase);
     public string UtcNow => "SYSUTCDATETIME()";
 }

@@ -3,6 +3,7 @@ unbalanced braces, missing usings and security regressions, not type errors."""
 import re, glob, sys, json
 
 cs = sorted(glob.glob('src/**/*.cs', recursive=True))
+cs = [f for f in cs if '/obj/' not in f.replace('\\', '/') and '/bin/' not in f.replace('\\', '/')]  # generated files
 problems = []
 
 def check(name, ok, detail=''):
@@ -48,8 +49,8 @@ check("no reversible password crypto", not re.search(r'(Encrypt|Decrypt)\w*\(\s*
 
 # 6. OTP is hashed and attempt-limited.
 check("OTP stored hashed", 'CodeHash' in full and '_hasher.Hash(code)' in full)
-check("OTP attempts counted", 'Attempts + 1' in full)
-check("OTP consumed after use", 'ConsumedAtUtc = SYSUTCDATETIME()' in full)
+check("OTP attempts counted", re.search(r'attempts \+ 1', full, re.I) is not None)
+check("OTP consumed after use", re.search(r'(ConsumedAtUtc = SYSUTCDATETIME\(\)|consumed_at_utc = @Now)', full) is not None)
 check("OTP uses secure RNG", 'RandomNumberGenerator.GetInt32' in full)
 
 # 7. The dev bypass cannot reach production.

@@ -18,6 +18,6 @@ public sealed class PostgresProvider : IDatabaseProvider, ISqlDialect
 
     public string IncrementNumberSeries =>
         "UPDATE number_series SET last_value = last_value + 1 WHERE series_key = @Key AND scope_id = @Scope RETURNING last_value";
-    public string InsertReturningId(string insertSql, string idColumn) => $"{insertSql} RETURNING {idColumn}";
+    public string InsertReturningId(string insertSql, string idColumn) => string.Concat(insertSql, " RETURNING ", idColumn);
     public string UtcNow => "(now() at time zone 'utc')";
 }

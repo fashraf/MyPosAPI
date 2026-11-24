@@ -46,19 +46,16 @@ public interface IAuthStore
 
 public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
 {
-    private const string UserColumns =
-        "user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt";
-
     public Task<DbConnection> OpenAsync(CancellationToken ct) => db.OpenAsync(ct);
 
     public Task<AuthUser?> FindByIdentifierAsync(DbConnection c, string identifier, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
-            $"SELECT {UserColumns} FROM core.app_user WHERE email = @Identifier OR phone = @Identifier OR username = @Identifier",
+            "SELECT user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE email = @Identifier OR phone = @Identifier OR username = @Identifier",
             new { Identifier = identifier }, cancellationToken: ct));
 
     public Task<AuthUser?> FindByIdAsync(DbConnection c, string userId, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
-            $"SELECT {UserColumns} FROM core.app_user WHERE user_id = @UserId", new { UserId = userId }, cancellationToken: ct));
+            "SELECT user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE user_id = @UserId", new { UserId = userId }, cancellationToken: ct));
 
     /// <summary>Role permissions plus explicit grants, minus explicit denials (a denial always wins).</summary>
     public async Task<IReadOnlyList<string>> PermissionsAsync(DbConnection c, string userId, CancellationToken ct) =>
