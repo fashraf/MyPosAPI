@@ -17,6 +17,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mypos-api
+  TARGET: ${{ vars.DEPLOY_TARGET || 'linux' }}
 
 jobs:
   image:
@@ -39,11 +40,25 @@ jobs:
           else
             echo "environment=staging" >> "$GITHUB_OUTPUT"; echo "tag=$short" >> "$GITHUB_OUTPUT"; echo "build=true" >> "$GITHUB_OUTPUT"
           fi
+      - uses: actions/setup-dotnet@v4
+        if: env.TARGET == 'windows'
+        with: { dotnet-version: 8.0.x }
+      - name: Package for Windows / IIS
+        if: env.TARGET == 'windows'
+        run: |
+          dotnet publish src/PosApi/PosApi.csproj -c Release -r win-x64 --self-contained false -o out /p:UseAppHost=false
+          cp -r db-migrations out/db-migrations
+          (cd out && zip -qr "../api-${{ steps.t.outputs.tag }}.zip" .)
+      - uses: actions/upload-artifact@v4
+        if: env.TARGET == 'windows'
+        with: { name: api-package, path: "api-${{ steps.t.outputs.tag }}.zip", retention-days: 30 }
       - uses: docker/login-action@v3
+        if: env.TARGET != 'windows'
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
       - uses: docker/setup-buildx-action@v3
+        if: env.TARGET != 'windows'
       - name: Build and push ${{ steps.t.outputs.tag }}
-        if: steps.t.outputs.build == 'true'
+        if: steps.t.outputs.build == 'true' && env.TARGET != 'windows'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -52,7 +67,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Promote the image that passed staging to ${{ github.ref_name }} (no rebuild)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && env.TARGET != 'windows'
         run: |
           if docker buildx imagetools inspect "$IMAGE:sha-${GITHUB_SHA::7}" >/dev/null 2>&1; then
             docker buildx imagetools create -t "$IMAGE:$GITHUB_REF_NAME" "$IMAGE:sha-${GITHUB_SHA::7}"
@@ -72,12 +87,29 @@ jobs:
         run: |
           mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
           echo "SSH=ssh -i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=20 -p ${{ secrets.DEPLOY_PORT || '22' }} ${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', needs.image.outputs.environment)] }}" >> "$GITHUB_ENV"
+      - name: Windows — API waits for PostgreSQL support
+        if: env.TARGET == 'windows' && vars.API_ON_POSTGRES != 'true'
+        run: |
+          echo "### ⏸ API not deployed yet — it switches on when the PostgreSQL database layer is finished (repository variable API_ON_POSTGRES=true)." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        if: env.TARGET == 'windows' && vars.API_ON_POSTGRES == 'true'
+        with: { name: api-package }
+      - name: Windows — ship scripts and deploy api=${{ needs.image.outputs.tag }}
+        if: env.TARGET == 'windows' && vars.API_ON_POSTGRES == 'true'
+        run: |
+          O="-i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new"; H="${{ secrets.DEPLOY_USER || 'Administrator' }}@${{ secrets[format('DEPLOY_HOST_{0}', needs.image.outputs.environment)] }}"; P="${{ secrets.DEPLOY_PORT || '22' }}"
+          z="api-${{ needs.image.outputs.tag }}.zip"
+          scp $O -P "$P" deploy/windows/*.ps1 "$H:C:/Project/POS/bin/"
+          scp $O -P "$P" "$z" "$H:C:/Project/POS/artifacts/$z"
+          ssh $O -p "$P" "$H" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Project\POS\bin\deploy.ps1 -Env ${{ needs.image.outputs.environment }} -App api -Tag ${{ needs.image.outputs.tag }} -Zip C:\Project\POS\artifacts\$z -By ${{ github.actor }}; exit \$LASTEXITCODE"
       - name: Ship the deploy kit (scripts + compose file)
+        if: env.TARGET != 'windows'
         run: |
           tar -C deploy -czf - . | $SSH "mkdir -p /opt/mypos/kit && tar -C /opt/mypos/kit -xzf - \
             && install -m 755 /opt/mypos/kit/bin/*.sh /opt/mypos/bin/ \
             && cp /opt/mypos/kit/compose.yml /opt/mypos/${{ needs.image.outputs.environment }}/compose.yml"
       - name: Deploy api=${{ needs.image.outputs.tag }}
+        if: env.TARGET != 'windows'
         run: |
           echo "${{ secrets.MYPOS_BOT_TOKEN }}" | $SSH "docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin" >/dev/null
           $SSH "DEPLOYED_BY=${{ github.actor }} /opt/mypos/bin/deploy.sh ${{ needs.image.outputs.environment }} api=${{ needs.image.outputs.tag }}"
@@ -85,7 +117,7 @@ jobs:
         if: always()
         run: echo "### ${{ job.status == 'success' && '✅' || '❌' }} API ${{ needs.image.outputs.tag }} → ${{ needs.image.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Start the sanity QA (staging)
-        if: success() && needs.image.outputs.environment == 'staging'
+        if: success() && needs.image.outputs.environment == 'staging' && (env.TARGET != 'windows' || vars.API_ON_POSTGRES == 'true')
         run: |
           curl -fsS -X POST -H "Authorization: Bearer ${{ secrets.MYPOS_BOT_TOKEN }}" -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository_owner }}/myposfo/dispatches \
