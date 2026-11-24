@@ -9,7 +9,25 @@ function Get-Cfg([string]$Env) {
   if (-not (Test-Path $f)) { throw "Missing $f - run setup.ps1 first" }
   $c = Get-Content $f -Raw | ConvertFrom-Json
   $c | Add-Member -NotePropertyName base -NotePropertyValue (Join-Path $Root $Folders[$Env]) -Force
+  $c.database = Resolve-DbName $c
   return $c
+}
+
+# PostgreSQL names are case-sensitive when quoted: pgAdmin keeps "POSMAIN_STAGING", psql makes posmain_staging.
+# Find the real name whatever its case, so the config never has to match it exactly.
+function Resolve-DbName($c) {
+  $psql = Join-Path $c.pgBin 'psql.exe'
+  if (-not (Test-Path $psql)) { return $c.database }
+  $env:PGPASSWORD = $c.dbPassword
+  $names = & $psql -h localhost -U $c.dbUser -d postgres -tAc "SELECT datname FROM pg_database WHERE lower(datname) = lower('$($c.database)')" 2>&1
+  $code = $LASTEXITCODE; Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+  if ($code -ne 0) { throw "Cannot connect to PostgreSQL as $($c.dbUser): $names" }
+  $found = @($names | Where-Object { "$_".Trim() }) | Select-Object -First 1
+  if (-not $found) {
+    throw ("Database '$($c.database)' does not exist. Fix: in pgAdmin run  CREATE DATABASE `"$($c.database)`" OWNER mypos_app;  " +
+           "then re-run the deploy in GitHub Actions.")
+  }
+  return "$found".Trim()
 }
 function Log($t) { Write-Host ("[{0:HH:mm:ss}] {1}" -f (Get-Date), $t) }
 
