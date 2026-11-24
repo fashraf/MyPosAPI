@@ -45,7 +45,7 @@ public sealed class OtpService : IOtpService
         _logger = logger;
     }
 
-    private bool UseDevCode => _options.UseFixedDevOtp && _environment.IsDevelopment();
+    private bool UseDevCode => _options.UseFixedDevOtp && (_environment.IsDevelopment() || _environment.IsStaging());
 
     public async Task<OtpChallenge> IssueAsync(string identifier, string purpose, CancellationToken ct)
     {
