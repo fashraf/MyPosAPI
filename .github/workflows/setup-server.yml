@@ -15,7 +15,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Connect
         run: |
-          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keygen -y -P '' -f ~/.ssh/id > /dev/null 2>&1 || { echo "::error::DEPLOY_SSH_KEY is not a usable private key. Paste the whole PRIVATE key (from -----BEGIN OPENSSH PRIVATE KEY----- to -----END OPENSSH PRIVATE KEY-----), not the .pub file, a PuTTY .ppk, or a key with a passphrase."; exit 1; }
           { echo "HOST=${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }}"
             echo "PORT=${{ secrets.DEPLOY_PORT || '22' }}"; } >> "$GITHUB_ENV"
       - name: Windows — install the deploy scripts

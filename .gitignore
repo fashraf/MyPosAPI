@@ -8,3 +8,7 @@ publish/
 *.pfx
 *.key
 *.pem
+
+# Deploy scripts live in deploy/bin (not build output)
+!deploy/bin/
+!deploy/bin/**
