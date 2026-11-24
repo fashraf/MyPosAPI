@@ -83,7 +83,7 @@ public static class AuthEndpoints
     /// </summary>
     private static async Task<IResult> RegisterAsync(
         RegisterRequest request,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         IOtpService otp,
         ILogger<Program> logger,
         CancellationToken ct)
@@ -110,60 +110,39 @@ public static class AuthEndpoints
 
         var ownerName = $"{request.Owner.FirstName} {request.Owner.LastName}".Trim();
 
-        var parameters = new DynamicParameters();
-        parameters.Add("@CompanyNameAr", request.Business.NameAr);
-        parameters.Add("@CompanyNameEn", request.Business.NameEn);
-        parameters.Add("@CrNumber", request.Tax.IsVatRegistered ? request.Tax.CrNumber : null);
-        parameters.Add("@VatNumber", request.Tax.IsVatRegistered ? request.Tax.VatNumber : null);
-        parameters.Add("@City", request.Business.City);
-        parameters.Add("@BranchNameAr", request.Business.NameAr);
-        parameters.Add("@BranchNameEn", request.Business.NameEn);
-        // The wizard collects one name. Storing it in both columns keeps the
-        // NOT NULL contract honest; the owner can correct the Arabic later.
-        parameters.Add("@OwnerNameAr", ownerName);
-        parameters.Add("@OwnerNameEn", ownerName);
-        parameters.Add("@OwnerEmail", request.Owner.Email.Trim());
-        parameters.Add("@OwnerPhone", string.IsNullOrWhiteSpace(request.Owner.Mobile)
-            ? null : request.Owner.Mobile.Trim());
-        parameters.Add("@UserId", dbType: DbType.String, direction: ParameterDirection.Output, size: 40);
-        parameters.Add("@BranchId", dbType: DbType.String, direction: ParameterDirection.Output, size: 40);
+        var (error, userId, branchId) = await store.RegisterBusinessAsync(new RegistrationInput(
+            request.Business.NameAr, request.Business.NameEn,
+            request.Tax.IsVatRegistered ? request.Tax.CrNumber : null,
+            request.Tax.IsVatRegistered ? request.Tax.VatNumber : null,
+            request.Business.City, request.Business.NameAr, request.Business.NameEn,
+            // The wizard collects one name. Storing it in both columns keeps the NOT NULL contract honest.
+            ownerName, ownerName, request.Owner.Email.Trim(),
+            string.IsNullOrWhiteSpace(request.Owner.Mobile) ? null : request.Owner.Mobile.Trim()), ct);
 
-        await using var connection = db.Create();
-
-        try
+        if (error != RegistrationError.None)
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "core.usp_RegisterBusiness",
-                parameters,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
-        }
-        catch (SqlException ex) when (ex.Number >= 53000 && ex.Number < 54000)
-        {
-            var error = ex.Number switch
+            var apiError = error switch
             {
-                53000 => ApiError.Create("name_required",
+                RegistrationError.NameRequired => ApiError.Create("name_required",
                     "The business needs both an Arabic and an English name.",
                     "المنشأة تحتاج اسمًا بالعربية وآخر بالإنجليزية."),
-                53001 => ApiError.Create("email_required",
+                RegistrationError.EmailRequired => ApiError.Create("email_required",
                     "An email address is required.", "البريد الإلكتروني مطلوب."),
-                53002 => ApiError.Create("email_taken",
+                RegistrationError.EmailTaken => ApiError.Create("email_taken",
                     "An account already exists for that email address.",
                     "يوجد حساب مسجّل بهذا البريد الإلكتروني."),
-                53003 => ApiError.Create("mobile_taken",
+                RegistrationError.MobileTaken => ApiError.Create("mobile_taken",
                     "An account already exists for that mobile number.",
                     "يوجد حساب مسجّل بهذا الرقم."),
-                53004 => ApiError.Create("bad_vat",
+                RegistrationError.BadVat => ApiError.Create("bad_vat",
                     "A Saudi VAT number is 15 digits beginning and ending with 3.",
                     "الرقم الضريبي السعودي ١٥ رقمًا يبدأ وينتهي بالرقم ٣."),
                 _ => ApiError.Create("registration_failed",
                     "Registration could not be completed.", "تعذّر إكمال التسجيل.")
             };
-
-            return Results.Json(error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return Results.Json(apiError, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        var userId = parameters.Get<string>("@UserId");
         logger.LogInformation("Business registered, owner {UserId}.", userId);
 
         var challenge = await otp.IssueAsync(request.Owner.Email.Trim(), "register", ct);
@@ -171,7 +150,7 @@ public static class AuthEndpoints
         return Results.Ok(new
         {
             userId,
-            branchId = parameters.Get<string>("@BranchId"),
+            branchId,
             challengeId = challenge.ChallengeId,
             expiresAtUtc = challenge.ExpiresAtUtc,
             devMode = challenge.IsDevCode
@@ -191,7 +170,7 @@ public static class AuthEndpoints
     /// </summary>
     private static async Task<IResult> RequestOtpAsync(
         LoginRequest request,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         IOtpService otp,
         IPasswordHasher hasher,
         IJwtTokenService tokens,
@@ -210,22 +189,14 @@ public static class AuthEndpoints
 
         var identifier = request.Identifier.Trim();
 
-        await using var connection = db.Create();
+        await using var connection = await store.OpenAsync(ct);
 
-        var user = await connection.QuerySingleOrDefaultAsync<AuthUserRow>(new CommandDefinition(
-            """
-            SELECT UserId, Username, NameAr, NameEn, RoleId, Status, AccessExpiresOn,
-                   PasswordHash, PasswordSalt
-            FROM core.AppUser
-            WHERE Email = @Identifier OR Phone = @Identifier OR Username = @Identifier;
-            """,
-            new { Identifier = identifier },
-            cancellationToken: ct));
+        var user = await store.FindByIdentifierAsync(connection, identifier, ct);
 
         if (authOptions.Value.LoginMode == LoginMode.SinglePassword)
         {
             return await SignInWithPasswordAsync(
-                connection, hasher, tokens, licenseGuard, user, request.Password, logger, ct);
+                store, connection, hasher, tokens, licenseGuard, user, request.Password, logger, ct);
         }
 
         /*----------------------------------------------- two-step: send a code */
@@ -255,11 +226,12 @@ public static class AuthEndpoints
     /// quietly accepting anyone should this mode ever be switched on there.
     /// </summary>
     private static async Task<IResult> SignInWithPasswordAsync(
+        IAuthStore store,
         System.Data.Common.DbConnection connection,
         IPasswordHasher hasher,
         IJwtTokenService tokens,
         LicenseGuard licenseGuard,
-        AuthUserRow? user,
+        AuthUser? user,
         string? password,
         ILogger<Program> logger,
         CancellationToken ct)
@@ -297,13 +269,9 @@ public static class AuthEndpoints
 
         if (RejectIfUnusable(user) is { } rejected) return rejected;
 
-        var permissions = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT PermissionKey FROM core.vw_EffectivePermission WHERE UserId = @UserId;",
-            new { user.UserId }, cancellationToken: ct))).ToList();
+        var permissions = await store.PermissionsAsync(connection, user.UserId, ct);
 
-        var branches = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT BranchId FROM core.UserBranch WHERE UserId = @UserId;",
-            new { user.UserId }, cancellationToken: ct))).ToList();
+        var branches = await store.BranchesAsync(connection, user.UserId, ct);
 
         /* The licence, last, immediately before a token exists. Checking after
            would mint a token that stays usable until it expires. */
@@ -318,13 +286,13 @@ public static class AuthEndpoints
             "Single-step password sign-in for {UserId}. The second factor was skipped.",
             user.UserId);
 
-        return Results.Ok(await IssueSessionAsync(connection, tokens, user, permissions, branches, ct));
+        return Results.Ok(await IssueSessionAsync(store, connection, tokens, user, permissions, branches, ct));
     }
 
     /// <summary>Step two: verify the code and issue a session.</summary>
     private static async Task<IResult> VerifyOtpAsync(
         OtpRequest request,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         IOtpService otp,
         IJwtTokenService tokens,
         LicenseGuard licenseGuard,
@@ -350,23 +318,13 @@ public static class AuthEndpoints
             return Results.Json(ApiError.Create(code, en, ar), statusCode: 401);
         }
 
-        await using var connection = db.Create();
+        await using var connection = await store.OpenAsync(ct);
 
-        var identifier = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            "SELECT Identifier FROM core.OtpChallenge WHERE ChallengeId = @ChallengeId;",
-            new { request.ChallengeId },
-            cancellationToken: ct));
+        var identifier = await store.ChallengeIdentifierAsync(connection, request.ChallengeId, ct);
 
         if (identifier is null) return Results.Unauthorized();
 
-        var user = await connection.QuerySingleOrDefaultAsync<AuthUserRow>(new CommandDefinition(
-            """
-            SELECT UserId, Username, NameAr, NameEn, RoleId, Status, AccessExpiresOn
-            FROM core.AppUser
-            WHERE Email = @Identifier OR Phone = @Identifier OR Username = @Identifier;
-            """,
-            new { Identifier = identifier },
-            cancellationToken: ct));
+        var user = await store.FindByIdentifierAsync(connection, identifier, ct);
 
         if (user is null) return Results.Unauthorized();
 
@@ -388,13 +346,9 @@ public static class AuthEndpoints
                 "انتهت صلاحية الوصول لهذا الحساب."), statusCode: 403);
         }
 
-        var permissions = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT PermissionKey FROM core.vw_EffectivePermission WHERE UserId = @UserId;",
-            new { user.UserId }, cancellationToken: ct))).ToList();
+        var permissions = await store.PermissionsAsync(connection, user.UserId, ct);
 
-        var branches = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT BranchId FROM core.UserBranch WHERE UserId = @UserId;",
-            new { user.UserId }, cancellationToken: ct))).ToList();
+        var branches = await store.BranchesAsync(connection, user.UserId, ct);
 
         /* The licence, immediately before a token exists — the same
            check the password path makes, so neither flow is a way round it. */
@@ -405,7 +359,7 @@ public static class AuthEndpoints
                 reason ?? "Access denied.", reason ?? "تم رفض الوصول."), statusCode: 403);
         }
 
-        return Results.Ok(await IssueSessionAsync(connection, tokens, user, permissions, branches, ct));
+        return Results.Ok(await IssueSessionAsync(store, connection, tokens, user, permissions, branches, ct));
     }
 
     /// <summary>
@@ -415,29 +369,17 @@ public static class AuthEndpoints
     /// route the caller took and the frontend needs no branch of its own.
     /// </summary>
     private static async Task<SessionResponse> IssueSessionAsync(
+        IAuthStore store,
         System.Data.Common.DbConnection connection,
         IJwtTokenService tokens,
-        AuthUserRow user,
+        AuthUser user,
         IReadOnlyList<string> permissions,
         IReadOnlyList<string> branches,
         CancellationToken ct)
     {
         var pair = tokens.Issue(user.UserId, user.Username, user.RoleId, permissions, branches);
 
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            INSERT INTO core.RefreshToken (TokenHash, UserId, ExpiresAtUtc)
-            VALUES (@TokenHash, @UserId, @ExpiresAtUtc);
-
-            UPDATE core.AppUser SET LastLoginAtUtc = SYSUTCDATETIME() WHERE UserId = @UserId;
-            """,
-            new
-            {
-                TokenHash = tokens.HashRefreshToken(pair.RefreshToken),
-                user.UserId,
-                ExpiresAtUtc = pair.RefreshExpiresAtUtc
-            },
-            cancellationToken: ct));
+        await store.SaveSessionAsync(connection, user.UserId, tokens.HashRefreshToken(pair.RefreshToken), pair.RefreshExpiresAtUtc, ct);
 
         return new SessionResponse(
             pair.AccessToken,
@@ -450,7 +392,7 @@ public static class AuthEndpoints
     /// <summary>
     /// Whether the account may sign in at all, whichever flow is in use.
     /// </summary>
-    private static IResult? RejectIfUnusable(AuthUserRow user)
+    private static IResult? RejectIfUnusable(AuthUser user)
     {
         if (!string.Equals(user.Status, "active", StringComparison.OrdinalIgnoreCase))
         {
@@ -473,43 +415,30 @@ public static class AuthEndpoints
 
     private static async Task<IResult> RefreshAsync(
         RefreshRequest request,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         IJwtTokenService tokens,
         LicenseGuard licenseGuard,
         CancellationToken ct)
     {
         var hash = tokens.HashRefreshToken(request.RefreshToken);
 
-        await using var connection = db.Create();
+        await using var connection = await store.OpenAsync(ct);
 
-        var userId = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            """
-            SELECT UserId FROM core.RefreshToken
-            WHERE TokenHash = @Hash
-              AND RevokedAtUtc IS NULL
-              AND ExpiresAtUtc > SYSUTCDATETIME();
-            """,
-            new { Hash = hash },
-            cancellationToken: ct));
+        var userId = await store.ActiveRefreshTokenUserAsync(connection, hash, ct);
 
         if (userId is null) return Results.Unauthorized();
 
-        var user = await connection.QuerySingleAsync<AuthUserRow>(new CommandDefinition(
-            "SELECT UserId, Username, NameAr, NameEn, RoleId, Status, AccessExpiresOn FROM core.AppUser WHERE UserId = @UserId;",
-            new { UserId = userId }, cancellationToken: ct));
+        var user = await store.FindByIdAsync(connection, userId, ct);
+        if (user is null) return Results.Unauthorized();
 
         if (!string.Equals(user.Status, "active", StringComparison.OrdinalIgnoreCase))
         {
             return Results.Unauthorized();
         }
 
-        var permissions = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT PermissionKey FROM core.vw_EffectivePermission WHERE UserId = @UserId;",
-            new { UserId = userId }, cancellationToken: ct))).ToList();
+        var permissions = await store.PermissionsAsync(connection, userId, ct);
 
-        var branches = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT BranchId FROM core.UserBranch WHERE UserId = @UserId;",
-            new { UserId = userId }, cancellationToken: ct))).ToList();
+        var branches = await store.BranchesAsync(connection, userId, ct);
 
         /*
          * Refresh is a sign-in too.
@@ -529,21 +458,7 @@ public static class AuthEndpoints
 
         // Rotate: the old token is revoked as the new one is issued, so a
         // stolen refresh token is usable at most once before it stops working.
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            UPDATE core.RefreshToken SET RevokedAtUtc = SYSUTCDATETIME() WHERE TokenHash = @OldHash;
-
-            INSERT INTO core.RefreshToken (TokenHash, UserId, ExpiresAtUtc)
-            VALUES (@NewHash, @UserId, @ExpiresAtUtc);
-            """,
-            new
-            {
-                OldHash = hash,
-                NewHash = tokens.HashRefreshToken(pair.RefreshToken),
-                UserId = userId,
-                ExpiresAtUtc = pair.RefreshExpiresAtUtc
-            },
-            cancellationToken: ct));
+        await store.RotateRefreshTokenAsync(connection, hash, tokens.HashRefreshToken(pair.RefreshToken), userId, pair.RefreshExpiresAtUtc, ct);
 
         return Results.Ok(new SessionResponse(
             pair.AccessToken, pair.RefreshToken, pair.AccessExpiresAtUtc,
@@ -553,48 +468,28 @@ public static class AuthEndpoints
 
     private static async Task<IResult> LogoutAsync(
         RefreshRequest request,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         IJwtTokenService tokens,
         CancellationToken ct)
     {
-        await using var connection = db.Create();
-
-        await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE core.RefreshToken SET RevokedAtUtc = SYSUTCDATETIME() WHERE TokenHash = @Hash;",
-            new { Hash = tokens.HashRefreshToken(request.RefreshToken) },
-            cancellationToken: ct));
+        await using var connection = await store.OpenAsync(ct);
+        await store.RevokeRefreshTokenAsync(connection, tokens.HashRefreshToken(request.RefreshToken), ct);
 
         return Results.NoContent();
     }
 
     private static async Task<IResult> MeAsync(
         ICurrentUser current,
-        ISqlConnectionFactory db,
+        IAuthStore store,
         CancellationToken ct = default)
     {
-        await using var connection = db.Create();
-
-        var user = await connection.QuerySingleOrDefaultAsync<AuthUserRow>(new CommandDefinition(
-            "SELECT UserId, Username, NameAr, NameEn, RoleId, Status, AccessExpiresOn FROM core.AppUser WHERE UserId = @UserId;",
-            new { current.UserId }, cancellationToken: ct));
+        await using var connection = await store.OpenAsync(ct);
+        var user = await store.FindByIdAsync(connection, current.UserId, ct);
 
         if (user is null) return Results.Unauthorized();
 
         return Results.Ok(new UserSummary(
             user.UserId, user.Username, user.NameAr, user.NameEn, user.RoleId,
             current.Permissions.ToList(), current.BranchIds.ToList()));
-    }
-
-    private sealed record AuthUserRow
-    {
-        public string UserId { get; init; } = string.Empty;
-        public string Username { get; init; } = string.Empty;
-        public string NameAr { get; init; } = string.Empty;
-        public string NameEn { get; init; } = string.Empty;
-        public string RoleId { get; init; } = string.Empty;
-        public string Status { get; init; } = string.Empty;
-        public DateOnly? AccessExpiresOn { get; init; }
-        public string? PasswordHash { get; init; }
-        public string? PasswordSalt { get; init; }
     }
 }

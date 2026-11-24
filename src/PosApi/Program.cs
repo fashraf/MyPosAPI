@@ -51,6 +51,10 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // "dotnet PosApi.dll --migrate": update the configured database (any engine) and exit. Used by every deploy.
+    if (args.Contains("--migrate"))
+        return PosApi.Data.Migrations.SchemaMigrator.Run(builder.Configuration);
+
     /*
      * Read Serilog's settings from configuration, but always keep a console
      * sink whatever that configuration says.
@@ -134,12 +138,14 @@ try
      * config file copied to production should be a loud crash at boot, not a
      * quiet hole nobody notices until it is used.
      */
-    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment())
+    /* Staging is allowed too: it holds test data only, and without an SMS/e-mail sender the fixed code is the
+       only way testers and the QA suite can sign in there. Production still refuses to start. */
+    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment() && !builder.Environment.IsStaging())
     {
         throw new InvalidOperationException(
             $"Auth:UseFixedDevOtp is enabled in the '{builder.Environment.EnvironmentName}' " +
             "environment. This bypasses authentication entirely and is only permitted in " +
-            "Development. Remove it from configuration before deploying.");
+            "Development and Staging. Remove it from configuration before deploying.");
     }
 
     /*
@@ -181,7 +187,8 @@ try
        AuditWriter for why they are not written inline. */
     builder.Services.AddSingleton<IAuditWriter, AuditWriter>();
     builder.Services.AddHostedService<AuditDrainService>();
-    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
+    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();   // legacy SQL Server features (being moved to IDb)
+    builder.Services.AddDatabase(builder.Configuration);                               // engine chosen by Database:Provider
     builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
     builder.Services.AddSingleton<LicenseGuard>();
     builder.Services.AddSingleton(signingKeyProvider);
@@ -495,15 +502,17 @@ try
         utc = DateTime.UtcNow,
         /* Which binary is answering. Compare against when you last built. */
         builtAtUtc,
+        /* The deployed image tag (sha-… or v…), set by deploy/compose.yml. */
+        version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev",
         environment = app.Environment.EnvironmentName
     }))
        .AllowAnonymous()
        .WithTags("Health");
 
-    app.MapGet("/health/db", async (ISqlConnectionFactory db, CancellationToken ct) =>
+    app.MapGet("/health/db", async (PosApi.Data.IDb db, CancellationToken ct) =>
     {
-        await using var connection = await db.CreateOpenAsync(ct);
-        return Results.Ok(new { status = "ok", database = connection.Database });
+        await using var connection = await db.OpenAsync(ct);
+        return Results.Ok(new { status = "ok", provider = db.Provider.Name, database = connection.Database });
     }).AllowAnonymous().WithTags("Health");
 
     /*

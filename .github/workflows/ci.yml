@@ -12,3 +12,33 @@ jobs:
         with: { dotnet-version: 8.0.x }
       - run: dotnet build src/PosApi/PosApi.csproj -c Release
       - run: python3 validate-api.py
+      - name: Deploy scripts lint
+        run: pip install -q shellcheck-py && shellcheck -x -S warning deploy/bin/*.sh
+      - name: Docker image builds
+        run: docker build -t mypos-api:ci .
+
+  postgres:
+    # Proves the engine-neutral layer on PostgreSQL: migrations apply (twice) and the API starts and reaches the DB.
+    runs-on: ubuntu-latest
+    services:
+      pg:
+        image: postgres:16
+        env: { POSTGRES_USER: mypos_app, POSTGRES_PASSWORD: ci, POSTGRES_DB: POSMAIN_CI }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U mypos_app" --health-interval 5s --health-retries 20
+    env:
+      Database__Provider: postgres
+      ConnectionStrings__PosMain: Host=localhost;Database=POSMAIN_CI;Username=mypos_app;Password=ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet publish src/PosApi/PosApi.csproj -c Release -o out
+      - name: Migrations apply, and are safe to run again
+        run: cd out && dotnet PosApi.dll --migrate && dotnet PosApi.dll --migrate
+      - name: API starts and reaches PostgreSQL
+        run: |
+          cd out
+          ASPNETCORE_URLS=http://127.0.0.1:5201 ASPNETCORE_ENVIRONMENT=Staging Jwt__SigningKey=$(openssl rand -hex 32) dotnet PosApi.dll > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:5201/health/db && break; sleep 2; done
+          curl -fs http://127.0.0.1:5201/health/db | grep -q '"provider":"postgres"' || { cat api.log; exit 1; }
