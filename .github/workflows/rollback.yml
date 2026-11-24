@@ -10,7 +10,8 @@ jobs:
     steps:
       - name: Roll back ${{ inputs.environment }}
         run: |
-          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keygen -y -P '' -f ~/.ssh/id > /dev/null 2>&1 || { echo "::error::DEPLOY_SSH_KEY is not a usable private key. Paste the whole PRIVATE key (from -----BEGIN OPENSSH PRIVATE KEY----- to -----END OPENSSH PRIVATE KEY-----), not the .pub file, a PuTTY .ppk, or a key with a passphrase."; exit 1; }
           ssh -i ~/.ssh/id -o StrictHostKeyChecking=accept-new -p ${{ secrets.DEPLOY_PORT || '22' }} ${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }} \
             "${{ vars.DEPLOY_TARGET == 'windows' && format('powershell -NoProfile -ExecutionPolicy Bypass -File C:\Project\POS\bin\rollback.ps1 -Env {0}', inputs.environment) || format('/opt/mypos/bin/rollback.sh {0}', inputs.environment) }}" | tee out.txt
           echo '```' >> "$GITHUB_STEP_SUMMARY"; cat out.txt >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
