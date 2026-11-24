@@ -12,3 +12,7 @@ jobs:
         with: { dotnet-version: 8.0.x }
       - run: dotnet build src/PosApi/PosApi.csproj -c Release
       - run: python3 validate-api.py
+      - name: Deploy scripts lint
+        run: pip install -q shellcheck-py && shellcheck -x -S warning deploy/bin/*.sh
+      - name: Docker image builds
+        run: docker build -t mypos-api:ci .

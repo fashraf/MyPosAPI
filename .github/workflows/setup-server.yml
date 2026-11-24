@@ -1,0 +1,21 @@
+name: Set up a server
+# Run once for a NEW server, after you put its IP in the repository secret DEPLOY_HOST_STAGING or DEPLOY_HOST_PRODUCTION.
+# Installs Docker, creates /opt/mypos/<env> with fresh random passwords, logs in to the image registry.
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [staging, production], default: staging }
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare ${{ inputs.environment }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          SSH="ssh -i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new -p ${{ secrets.DEPLOY_PORT || '22' }} ${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }}"
+          port=80; [[ "${{ inputs.environment }}" == staging ]] && port=8080
+          tar -C deploy -czf - . | $SSH "mkdir -p /opt/mypos/kit /opt/mypos/bin && tar -C /opt/mypos/kit -xzf - && install -m 755 /opt/mypos/kit/bin/*.sh /opt/mypos/bin/"
+          $SSH "/opt/mypos/bin/setup.sh ${{ inputs.environment }} $port && cp /opt/mypos/kit/compose.yml /opt/mypos/${{ inputs.environment }}/compose.yml"
+          echo "${{ secrets.MYPOS_BOT_TOKEN }}" | $SSH "docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin"
+          echo "Server ready. Now run 'Deploy API' and 'Deploy web' for ${{ inputs.environment }}." >> "$GITHUB_STEP_SUMMARY"

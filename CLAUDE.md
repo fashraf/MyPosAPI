@@ -16,7 +16,15 @@
    Assigned only on the server, inside the transaction.
 7. Secrets never go in git: connection strings and JWT keys live in `appsettings.Production.json` on the server only.
 
+## Deploy kit (`deploy/`)
+- Docker Compose per environment on any Linux server: `db` (SQL Server Express), `api`, `web` (nginx, proxies /api and /health).
+- Scripts in `deploy/bin/` (copied to `/opt/mypos/bin` on every deploy): `deploy.sh` (backup → migrate → swap → health → auto-rollback),
+  `rollback.sh` (previous release, < 1 min), `migrate.sh` (runs new files from `db-migrations/` baked into the image; journal `dbo.__Migrations`),
+  `backup.sh`, `restore.sh`, `setup.sh` (fresh server). Keep them shellcheck-clean (CI checks).
+- The API image must contain `db-migrations/`; migration order = base script, then numbered files.
+
 ## Environments
 - Staging: merge to `develop` → deploy + migrate staging DB → smoke tests.
 - Production: release tag on `main` → Fahad approves in GitHub → backup → migrate → deploy → smoke → auto-rollback on failure.
-- Server: 144.91.103.111 (Windows + IIS + SQL Server, to confirm). Database `MyPosDB` (prod), `MyPosDB_Staging` (staging).
+- Server: any Linux box with Docker; its IP is only in the repo secrets `DEPLOY_HOST_STAGING` / `DEPLOY_HOST_PRODUCTION`.
+  Databases `MyPosDB` (prod) and `MyPosDB_Staging` (staging).
