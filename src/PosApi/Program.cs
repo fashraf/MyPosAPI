@@ -51,6 +51,10 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // "dotnet PosApi.dll --migrate": update the configured database (any engine) and exit. Used by every deploy.
+    if (args.Contains("--migrate"))
+        return PosApi.Data.Migrations.SchemaMigrator.Run(builder.Configuration);
+
     /*
      * Read Serilog's settings from configuration, but always keep a console
      * sink whatever that configuration says.
@@ -181,7 +185,8 @@ try
        AuditWriter for why they are not written inline. */
     builder.Services.AddSingleton<IAuditWriter, AuditWriter>();
     builder.Services.AddHostedService<AuditDrainService>();
-    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
+    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();   // legacy SQL Server features (being moved to IDb)
+    builder.Services.AddDatabase(builder.Configuration);                               // engine chosen by Database:Provider
     builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
     builder.Services.AddSingleton<LicenseGuard>();
     builder.Services.AddSingleton(signingKeyProvider);
@@ -502,10 +507,10 @@ try
        .AllowAnonymous()
        .WithTags("Health");
 
-    app.MapGet("/health/db", async (ISqlConnectionFactory db, CancellationToken ct) =>
+    app.MapGet("/health/db", async (PosApi.Data.IDb db, CancellationToken ct) =>
     {
-        await using var connection = await db.CreateOpenAsync(ct);
-        return Results.Ok(new { status = "ok", database = connection.Database });
+        await using var connection = await db.OpenAsync(ct);
+        return Results.Ok(new { status = "ok", provider = db.Provider.Name, database = connection.Database });
     }).AllowAnonymous().WithTags("Health");
 
     /*

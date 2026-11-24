@@ -16,6 +16,18 @@
    Assigned only on the server, inside the transaction.
 7. Secrets never go in git: connection strings and JWT keys live in `appsettings.Production.json` on the server only.
 
+## Database layer (engine-neutral) — read before touching data access
+- Engine comes from configuration only: `Database:Provider` (postgres | sqlserver) + `ConnectionStrings:PosMain`.
+  Never branch on the engine in feature code.
+- Layers: Endpoint → Service (business rules, transactions, numbering — C#, no stored procedures)
+  → Repository (one per aggregate, interface + one implementation) → `IDb` (connection, transaction, SqlKata query builder).
+- Write queries with SqlKata (`db.Query(conn).Query("sale")...`) or plain ANSI SQL. The only engine-specific SQL lives in
+  `Data/Providers/*Provider.cs` (`ISqlDialect`) — keep it tiny.
+- Schema = FluentMigrator classes in `Data/Migrations/` (one source for every engine). `dotnet PosApi.dll --migrate` runs them.
+  Names: lower_snake_case tables/columns. Never edit an applied migration; add a new one.
+- Business numbers via `INumberSeries.NextAsync(conn, tx, "invoice")` inside the transaction.
+- Legacy: `ISqlConnectionFactory` + `db-migrations/*.sql` (T-SQL) are the old SQL Server path; features move to `IDb` one by one.
+
 ## Deploy kit (`deploy/`)
 - Docker Compose per environment on any Linux server: `db` (SQL Server Express), `api`, `web` (nginx, proxies /api and /health).
 - Scripts in `deploy/bin/` (copied to `/opt/mypos/bin` on every deploy): `deploy.sh` (backup → migrate → swap → health → auto-rollback),
