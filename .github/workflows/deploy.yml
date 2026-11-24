@@ -119,7 +119,10 @@ jobs:
         run: echo "### ${{ job.status == 'success' && '✅' || '❌' }} API ${{ needs.image.outputs.tag }} → ${{ needs.image.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Start the sanity QA (staging)
         if: success() && needs.image.outputs.environment == 'staging' && (env.TARGET != 'windows' || vars.API_ON_POSTGRES == 'true')
+        continue-on-error: true   # QA is a report; a missing/expired token must never fail a good deploy
+        env: { BOT: "${{ secrets.MYPOS_BOT_TOKEN }}" }
         run: |
-          curl -fsS -X POST -H "Authorization: Bearer ${{ secrets.MYPOS_BOT_TOKEN }}" -H "Accept: application/vnd.github+json" \
+          if [ -z "$BOT" ]; then echo "### ℹ️ QA not started automatically (no MYPOS_BOT_TOKEN). Run it from MyPOSFO → Actions → Sanity QA." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          curl -fsS -X POST -H "Authorization: Bearer $BOT" -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository_owner }}/myposfo/dispatches \
             -d '{"event_type":"qa-run","client_payload":{"trigger":"MyPosAPI ${{ needs.image.outputs.tag }}","commit":"${{ github.sha }}"}}'

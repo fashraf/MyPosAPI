@@ -12,8 +12,15 @@ Log "Deploying $Env ${App}: $prev -> $Tag"
 if (-not (Test-Path $Zip)) { throw "Package not found: $Zip" }
 
 $rel = Join-Path $c.base "$App\releases\$Tag"
-if (Test-Path $rel) { Remove-Item $rel -Recurse -Force }
-Expand-Archive -Path $Zip -DestinationPath $rel -Force
+$same = ($Tag -eq $prev)
+if ($same) {
+  # Re-running the version that is already live: its files are in use, so keep them (same build) and only
+  # refresh settings, run migrations and restart.
+  Log "$Tag is already live - reusing its files."
+} else {
+  if (Test-Path $rel) { Remove-Item $rel -Recurse -Force }
+  Expand-Archive -Path $Zip -DestinationPath $rel -Force
+}
 $pool = if ($App -eq 'web') { $c.site } else { "$($c.site)-api" }
 
 if ($App -eq 'web') {
@@ -29,7 +36,11 @@ if ($App -eq 'web') {
   $code = $LASTEXITCODE
   Pop-Location
   Remove-Item Env:\ConnectionStrings__PosMain
-  if ($code -ne 0) { Log "Migration failed - old version keeps running."; Remove-Item $rel -Recurse -Force; exit 1 }
+  if ($code -ne 0) {
+    Log "Migration failed - old version keeps running."
+    if (-not $same) { Remove-Item $rel -Recurse -Force -ErrorAction SilentlyContinue }
+    exit 1
+  }
   'Updating, back in a moment.' | Set-Content (Join-Path $c.base 'api\current\app_offline.htm') -ErrorAction SilentlyContinue
 }
 
