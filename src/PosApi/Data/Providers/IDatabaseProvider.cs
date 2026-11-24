@@ -34,6 +34,9 @@ public interface ISqlDialect
     /// until the transaction ends, so numbers are gapless). Parameters: @Key, @Scope.</summary>
     string IncrementNumberSeries { get; }
 
+    /// <summary>Turns "INSERT INTO t (…) VALUES (…)" into a statement that also returns the new identity value.</summary>
+    string InsertReturningId(string insertSql, string idColumn);
+
     /// <summary>Current UTC timestamp expression.</summary>
     string UtcNow { get; }
 }

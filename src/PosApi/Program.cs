@@ -138,12 +138,14 @@ try
      * config file copied to production should be a loud crash at boot, not a
      * quiet hole nobody notices until it is used.
      */
-    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment())
+    /* Staging is allowed too: it holds test data only, and without an SMS/e-mail sender the fixed code is the
+       only way testers and the QA suite can sign in there. Production still refuses to start. */
+    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment() && !builder.Environment.IsStaging())
     {
         throw new InvalidOperationException(
             $"Auth:UseFixedDevOtp is enabled in the '{builder.Environment.EnvironmentName}' " +
             "environment. This bypasses authentication entirely and is only permitted in " +
-            "Development. Remove it from configuration before deploying.");
+            "Development and Staging. Remove it from configuration before deploying.");
     }
 
     /*

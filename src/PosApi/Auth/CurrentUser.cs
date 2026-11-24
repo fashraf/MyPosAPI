@@ -16,20 +16,24 @@ public interface ICurrentUser
 
 public sealed class CurrentUser : ICurrentUser
 {
-    private readonly ClaimsPrincipal? _principal;
+    private readonly IHttpContextAccessor _accessor;
 
-    public CurrentUser(IHttpContextAccessor accessor)
-    {
-        _principal = accessor.HttpContext?.User;
+    public CurrentUser(IHttpContextAccessor accessor) => _accessor = accessor;
 
-        Permissions = _principal?.FindAll(JwtTokenService.PermissionClaim)
+    /* Read the principal when asked, not when constructed. The audit middleware resolves this service before
+       authentication has run; a principal captured then stays anonymous for the whole request (that made /me
+       return 401 for every signed-in user). */
+    private ClaimsPrincipal? _principal => _accessor.HttpContext?.User;
+
+    public IReadOnlySet<string> Permissions =>
+        _principal?.FindAll(JwtTokenService.PermissionClaim)
             .Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            ?? new HashSet<string>();
+        ?? new HashSet<string>();
 
-        BranchIds = _principal?.FindAll(JwtTokenService.BranchClaim)
+    public IReadOnlySet<string> BranchIds =>
+        _principal?.FindAll(JwtTokenService.BranchClaim)
             .Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            ?? new HashSet<string>();
-    }
+        ?? new HashSet<string>();
 
     public bool IsAuthenticated => _principal?.Identity?.IsAuthenticated ?? false;
 
@@ -51,8 +55,6 @@ public sealed class CurrentUser : ICurrentUser
         ?? _principal?.FindFirstValue("role")
         ?? string.Empty;
 
-    public IReadOnlySet<string> Permissions { get; }
-    public IReadOnlySet<string> BranchIds { get; }
 
     public bool Can(string permission) => Permissions.Contains(permission);
 

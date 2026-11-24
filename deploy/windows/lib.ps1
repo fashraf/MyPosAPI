@@ -102,6 +102,9 @@ function Write-ApiConfig($c, [string]$Folder, [string]$Tag) {
     ASPNETCORE_ENVIRONMENT = $aspnet; APP_VERSION = $Tag
     Database__Provider = 'postgres'; ConnectionStrings__PosMain = $cs
     Jwt__SigningKey = $c.jwtSigningKey; Cors__AllowedOrigins__0 = $c.publicUrl
+    Auth__LoginMode = 'TwoStep'
+    # Staging only: fixed one-time code (no SMS/e-mail sender yet). Production refuses to start with it.
+    Auth__UseFixedDevOtp = $(if ($c.environment -eq 'staging') { 'true' } else { 'false' })
   }
   $envXml = ($vars.GetEnumerator() | ForEach-Object { "        <environmentVariable name=`"$($_.Key)`" value=`"$([Security.SecurityElement]::Escape([string]$_.Value))`" />" }) -join "`n"
   @"

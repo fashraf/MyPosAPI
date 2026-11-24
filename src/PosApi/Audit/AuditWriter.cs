@@ -54,11 +54,11 @@ public sealed class AuditWriter : IAuditWriter
 public sealed class AuditDrainService : BackgroundService
 {
     private readonly AuditWriter _writer;
-    private readonly ISqlConnectionFactory _db;
+    private readonly PosApi.Data.IDb _db;
     private readonly ILogger<AuditDrainService> _logger;
 
     public AuditDrainService(
-        IAuditWriter writer, ISqlConnectionFactory db, ILogger<AuditDrainService> logger)
+        IAuditWriter writer, PosApi.Data.IDb db, ILogger<AuditDrainService> logger)
     {
         _writer = (AuditWriter)writer;
         _db = db;
@@ -71,25 +71,24 @@ public sealed class AuditDrainService : BackgroundService
         {
             try
             {
-                await using var connection = _db.Create();
+                await using var connection = await _db.OpenAsync(stoppingToken);
 
                 if (item is AuditEntry entry)
                 {
                     var auditId = await connection.ExecuteScalarAsync<long>(
+                        _db.Provider.Dialect.InsertReturningId(
                         """
-                        INSERT INTO audit.AuditEntry
-                            (UserId, Username, RoleId, Action, Module, EntityType, EntityId,
-                             ApiPath, HttpMethod, CurrentPage, PreviousPage, BranchId,
-                             OldValue, NewValue, Details, Result, StatusCode, ErrorMessage,
-                             IpAddress, UserAgent, CorrelationId)
+                        INSERT INTO audit.audit_entry
+                            (user_id, username, role_id, action, module, entity_type, entity_id,
+                             api_path, http_method, current_page, previous_page, branch_id,
+                             old_value, new_value, details, result, status_code, error_message,
+                             ip_address, user_agent, correlation_id, occurred_at_utc)
                         VALUES
                             (@UserId, @Username, @RoleId, @Action, @Module, @EntityType, @EntityId,
                              @ApiPath, @HttpMethod, @CurrentPage, @PreviousPage, @BranchId,
                              @OldValue, @NewValue, @Details, @Result, @StatusCode, @ErrorMessage,
-                             @IpAddress, @UserAgent, @CorrelationId);
-
-                        SELECT CAST(SCOPE_IDENTITY() AS BIGINT);
-                        """, entry);
+                             @IpAddress, @UserAgent, @CorrelationId, CURRENT_TIMESTAMP)
+                        """, "audit_id"), entry);
 
                     /* SCOPE_IDENTITY, so these attach to this entry rather than
                        whatever anyone else inserted most recently. */
@@ -97,14 +96,14 @@ public sealed class AuditDrainService : BackgroundService
                     {
                         await connection.ExecuteAsync(
                             """
-                            INSERT INTO audit.AuditChange
-                                (AuditId, SchemaName, TableName, Operation, PrimaryKey,
-                                 ForeignKey, ForeignTable, ColumnName, OldValue,
-                                 NewValue, RowsAffected)
+                            INSERT INTO audit.audit_change
+                                (audit_id, schema_name, table_name, operation, primary_key,
+                                 foreign_key, foreign_table, column_name, old_value,
+                                 new_value, rows_affected)
                             VALUES
                                 (@AuditId, @SchemaName, @TableName, @Operation, @PrimaryKey,
                                  @ForeignKey, @ForeignTable, @ColumnName, @OldValue,
-                                 @NewValue, @RowsAffected);
+                                 @NewValue, @RowsAffected)
                             """,
                             new
                             {
@@ -120,14 +119,14 @@ public sealed class AuditDrainService : BackgroundService
                 {
                     await connection.ExecuteAsync(
                         """
-                        INSERT INTO audit.RequestTiming
-                            (CorrelationId, UserId, Username, ApiPath, HttpMethod,
-                             CurrentPage, PreviousPage, TotalMs, DatabaseMs, QueryCount,
-                             StatusCode, Succeeded, ErrorMessage, ResponseBytes)
+                        INSERT INTO audit.request_timing
+                            (correlation_id, user_id, username, api_path, http_method,
+                             current_page, previous_page, total_ms, database_ms, query_count,
+                             status_code, succeeded, error_message, response_bytes)
                         VALUES
                             (@CorrelationId, @UserId, @Username, @ApiPath, @HttpMethod,
                              @CurrentPage, @PreviousPage, @TotalMs, @DatabaseMs, @QueryCount,
-                             @StatusCode, @Succeeded, @ErrorMessage, @ResponseBytes);
+                             @StatusCode, @Succeeded, @ErrorMessage, @ResponseBytes)
                         """, timing);
                 }
             }
