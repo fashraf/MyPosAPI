@@ -102,7 +102,7 @@ jobs:
           z="api-${{ needs.image.outputs.tag }}.zip"
           scp $O -P "$P" deploy/windows/*.ps1 "$H:C:/Project/POS/bin/"
           scp $O -P "$P" "$z" "$H:C:/Project/POS/artifacts/$z"
-          ssh $O -p "$P" "$H" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Project\POS\bin\deploy.ps1 -Env ${{ needs.image.outputs.environment }} -App api -Tag ${{ needs.image.outputs.tag }} -Zip C:\Project\POS\artifacts\$z -By ${{ github.actor }}; exit \$LASTEXITCODE"
+          ssh $O -p "$P" "$H" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Project\POS\bin\deploy.ps1 -Env ${{ needs.image.outputs.environment }} -App api -Tag ${{ needs.image.outputs.tag }} -Zip C:/Project/POS/artifacts/$z -By ${{ github.actor }}; exit \$LASTEXITCODE"
       - name: Ship the deploy kit (scripts + compose file)
         if: env.TARGET != 'windows'
         run: |
