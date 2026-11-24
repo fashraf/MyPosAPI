@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Dapper;
+using SqlKata.Execution;
 
 namespace PosApi.Data;
 
