@@ -495,6 +495,8 @@ try
         utc = DateTime.UtcNow,
         /* Which binary is answering. Compare against when you last built. */
         builtAtUtc,
+        /* The deployed image tag (sha-… or v…), set by deploy/compose.yml. */
+        version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev",
         environment = app.Environment.EnvironmentName
     }))
        .AllowAnonymous()
