@@ -59,11 +59,11 @@ public static class TenantSeeder
 
             foreach (var b in Arr(root, "branches"))
             {
-                var id = S(b, "id")!;
+                var id = Key(b);
                 if (await Exists("core.branch", "branch_id", id)) continue;
                 await q.Query("core.branch").InsertAsync(new Dictionary<string, object?>
                 {
-                    ["branch_id"] = id, ["code"] = S(b, "code") ?? id, ["name_ar"] = S(b, "nameAr") ?? "", ["name_en"] = S(b, "nameEn") ?? "",
+                    ["branch_id"] = id, ["code"] = S(b, "code") ?? id.ToString(), ["name_ar"] = S(b, "nameAr") ?? "", ["name_en"] = S(b, "nameEn") ?? "",
                     ["phone"] = S(b, "phone"), ["address_en"] = S(b, "city"), ["is_active"] = S(b, "status") != "inactive",
                     ["created_at_utc"] = now, ["updated_at_utc"] = now,
                 }, tx);
@@ -105,21 +105,21 @@ public static class TenantSeeder
 
             foreach (var u in Arr(root, "users"))
             {
-                var id = S(u, "id")!;
+                var id = Key(u);
                 var email = S(u, "email");
                 if (await Exists("core.app_user", "user_id", id)) continue;
                 if (email is not null && await Exists("core.app_user", "email", email)) continue;
                 var first = S(u, "firstName") ?? ""; var last = S(u, "lastName") ?? "";
                 await q.Query("core.app_user").InsertAsync(new Dictionary<string, object?>
                 {
-                    ["user_id"] = id, ["username"] = S(u, "username") ?? email ?? id,
+                    ["user_id"] = id, ["username"] = S(u, "username") ?? email ?? id.ToString(),
                     ["name_en"] = S(u, "nameEn") ?? $"{first} {last}".Trim(), ["name_ar"] = S(u, "nameAr") ?? $"{first} {last}".Trim(),
                     ["email"] = email, ["phone"] = S(u, "phone"), ["role_id"] = S(u, "roleId") ?? "rol_cashier",
                     ["employee_no"] = int.TryParse(S(u, "employeeId")?.TrimStart('E', 'M', 'P', '-'), out var no) ? no : null,
                     ["status"] = S(u, "status") ?? "active", ["is_external"] = false, ["base_salary_h"] = 0L,
                     ["created_at_utc"] = now, ["updated_at_utc"] = now, ["created_by"] = "seed",
                 }, tx);
-                foreach (var branch in Arr(u, "branchIds").Select(x => x!.GetValue<string>()))
+                foreach (var branch in Arr(u, "branchIds").Select(x => ParseKey(x!.GetValue<string>())))
                     if (await Exists("core.branch", "branch_id", branch))
                         await q.Query("core.user_branch").InsertAsync(new { user_id = id, branch_id = branch }, tx);
                 Count("users");
@@ -127,7 +127,7 @@ public static class TenantSeeder
 
             foreach (var c in Arr(root, "categories"))
             {
-                var id = S(c, "id")!;
+                var id = Key(c);
                 if (await Exists("core.category", "category_id", id)) continue;
                 await q.Query("core.category").InsertAsync(new Dictionary<string, object?>
                 {
@@ -140,7 +140,7 @@ public static class TenantSeeder
 
             foreach (var g in Arr(root, "printGroups"))
             {
-                var id = S(g, "id")!;
+                var id = Key(g);
                 if (await Exists("core.print_group", "print_group_id", id)) continue;
                 await q.Query("core.print_group").InsertAsync(new Dictionary<string, object?>
                 {
@@ -153,10 +153,22 @@ public static class TenantSeeder
 
             foreach (var item in Arr(root, "catalog"))
             {
-                var id = S(item, "id")!;
+                var id = Key(item);
                 if (await Exists("core.catalog_item", "item_id", id)) continue;
                 await q.Query("core.catalog_item").InsertAsync(PosApi.Features.Catalog.CatalogRow.From(item!.AsObject(), now), tx);
                 Count("items");
+            }
+
+            /* Next new branch/user/item/... gets the next free number after the seeded ones. */
+            var series = new NumberSeries(db);
+            foreach (var (key, table, column) in new[]
+            {
+                ("branch", "core.branch", "branch_id"), ("user", "core.app_user", "user_id"), ("category", "core.category", "category_id"),
+                ("print_group", "core.print_group", "print_group_id"), ("catalog_item", "core.catalog_item", "item_id"),
+            })
+            {
+                var max = await q.Query(table).MaxAsync<long?>(column, tx) ?? 0;
+                await series.EnsureAtLeastAsync(conn, tx, key, max);
             }
             return 0;
         }, ct);
@@ -166,6 +178,12 @@ public static class TenantSeeder
             : "Seed added: " + string.Join(", ", added.Select(kv => $"{kv.Value} {kv.Key}")));
         return 0;
     }
+
+    /// <summary>The record's integer id ("1" in the setup file).</summary>
+    private static long Key(JsonNode? n) => ParseKey(S(n, "id"));
+
+    internal static long ParseKey(string? value) =>
+        long.TryParse(value, out var id) ? id : throw new InvalidDataException($"Seed ids must be whole numbers, got '{value}'.");
 
     internal static string? S(JsonNode? n, string key) =>
         n?[key] is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s : null;

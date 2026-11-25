@@ -66,4 +66,6 @@ public sealed record RequestTiming
     public required bool Succeeded { get; init; }
     public string? ErrorMessage { get; init; }
     public int? ResponseBytes { get; init; }
+    /// <summary>The SQL statements the request ran, in order (text and parameter names only, never values).</summary>
+    public IReadOnlyList<PosApi.Data.Profiling.QueryEntry> Queries { get; init; } = [];
 }

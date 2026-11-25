@@ -2,7 +2,7 @@
  "tenant": "ten_alnoor",
  "branches": [
   {
-   "id": "brn_001",
+   "id": "1",
    "nameAr": "فرع العليا الرئيسي — الرياض",
    "nameEn": "Riyadh Flagship — Olaya",
    "code": "RUH-OLY",
@@ -11,33 +11,11 @@
    "status": "active",
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z"
-  },
-  {
-   "id": "brn_002",
-   "nameAr": "فرع المركز المالي — الرياض",
-   "nameEn": "Riyadh — KAFD",
-   "code": "RUH-KFD",
-   "city": "Riyadh",
-   "phone": "+966 11 465 2210",
-   "status": "active",
-   "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
-  },
-  {
-   "id": "brn_003",
-   "nameAr": "فرع الكورنيش — جدة",
-   "nameEn": "Jeddah — Corniche",
-   "code": "JED-COR",
-   "city": "Jeddah",
-   "phone": "+966 12 614 0090",
-   "status": "active",
-   "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
   }
  ],
  "categories": [
   {
-   "id": "cat_hot",
+   "id": "1",
    "nameAr": "قهوة ساخنة",
    "nameEn": "Hot Coffee",
    "appliesTo": "product",
@@ -47,7 +25,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_cold",
+   "id": "2",
    "nameAr": "قهوة باردة",
    "nameEn": "Iced & Cold Brew",
    "appliesTo": "product",
@@ -57,7 +35,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_tea",
+   "id": "3",
    "nameAr": "شاي ومشروبات",
    "nameEn": "Tea & Others",
    "appliesTo": "product",
@@ -67,7 +45,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_bakery",
+   "id": "4",
    "nameAr": "مخبوزات",
    "nameEn": "Bakery",
    "appliesTo": "product",
@@ -77,7 +55,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_dessert",
+   "id": "5",
    "nameAr": "حلويات",
    "nameEn": "Desserts",
    "appliesTo": "product",
@@ -87,7 +65,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_beans",
+   "id": "6",
    "nameAr": "بن للبيع",
    "nameEn": "Retail Beans",
    "appliesTo": "product",
@@ -97,7 +75,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_bev",
+   "id": "7",
    "nameAr": "مشروبات معبأة",
    "nameEn": "Bottled Drinks",
    "appliesTo": "product",
@@ -107,7 +85,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_class",
+   "id": "8",
    "nameAr": "ورش وتجارب",
    "nameEn": "Workshops",
    "appliesTo": "service",
@@ -117,7 +95,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "cat_combo",
+   "id": "9",
    "nameAr": "عروض الكومبو",
    "nameEn": "Combos",
    "appliesTo": "product",
@@ -129,7 +107,7 @@
  ],
  "printGroups": [
   {
-   "id": "pgr_bar",
+   "id": "1",
    "nameAr": "البار",
    "nameEn": "Espresso Bar",
    "ticketTitle": "BAR",
@@ -139,7 +117,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "pgr_kitchen",
+   "id": "2",
    "nameAr": "المطبخ",
    "nameEn": "Pastry Kitchen",
    "ticketTitle": "KITCHEN",
@@ -149,7 +127,7 @@
    "updatedAt": "2026-08-20T09:00:00.000Z"
   },
   {
-   "id": "pgr_packing",
+   "id": "3",
    "nameAr": "التغليف",
    "nameEn": "Packing",
    "ticketTitle": "PACKING",
@@ -161,18 +139,18 @@
  ],
  "catalog": [
   {
-   "id": "itm_001",
+   "id": "1",
    "kind": "product",
    "nameAr": "إسبريسو",
    "nameEn": "Espresso",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 1200,
    "costH": 310,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-ESP",
    "barcode": "6287001000011",
@@ -227,30 +205,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_cup8",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_002",
+   "id": "2",
    "kind": "product",
    "nameAr": "أمريكانو",
    "nameEn": "Americano",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 1400,
    "costH": 340,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-AMR",
    "barcode": "6287001000028",
@@ -336,30 +305,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_003",
+   "id": "3",
    "kind": "product",
    "nameAr": "كابتشينو",
    "nameEn": "Cappuccino",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 1800,
    "costH": 460,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-CAP",
    "barcode": "6287001000035",
@@ -487,34 +447,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 150
-    },
-    {
-     "ingredientId": "ing_cup8",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_004",
+   "id": "4",
    "kind": "product",
    "nameAr": "فلات وايت",
    "nameEn": "Flat White",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 1900,
    "costH": 490,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-FLW",
    "barcode": "6287001000042",
@@ -611,34 +558,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 120
-    },
-    {
-     "ingredientId": "ing_cup8",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_005",
+   "id": "5",
    "kind": "product",
    "nameAr": "سبانش لاتيه",
    "nameEn": "Spanish Latte",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 2100,
    "costH": 560,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-SPL",
    "barcode": "6287001000059",
@@ -766,38 +700,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 180
-    },
-    {
-     "ingredientId": "ing_condensed",
-     "quantity": 30
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_006",
+   "id": "6",
    "kind": "product",
    "nameAr": "قهوة سعودية — دلة",
    "nameEn": "Saudi Coffee — Dallah",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "Khawlani beans with cardamom and saffron, served with dates.",
    "imageUrl": null,
    "priceH": 2500,
    "costH": 600,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-DAL",
    "barcode": "6287001000066",
@@ -837,30 +754,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_saudi",
-     "quantity": 30
-    },
-    {
-     "ingredientId": "ing_cardamom",
-     "quantity": 3
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_007",
+   "id": "7",
    "kind": "product",
    "nameAr": "في ٦٠ — قهوة مقطرة",
    "nameEn": "V60 Pour-over",
-   "categoryId": "cat_hot",
+   "categoryId": "1",
    "description": "",
    "imageUrl": null,
    "priceH": 2400,
    "costH": 680,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "HOT-V60",
    "barcode": "6287001000073",
@@ -871,26 +779,21 @@
    "minStockLevel": 0,
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 20
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_008",
+   "id": "8",
    "kind": "product",
    "nameAr": "آيس لاتيه",
    "nameEn": "Iced Latte",
-   "categoryId": "cat_cold",
+   "categoryId": "2",
    "description": "",
    "imageUrl": null,
    "priceH": 2000,
    "costH": 500,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "CLD-ILT",
    "barcode": "6287001000080",
@@ -1018,38 +921,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 200
-    },
-    {
-     "ingredientId": "ing_ice",
-     "quantity": 150
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_009",
+   "id": "9",
    "kind": "product",
    "nameAr": "كولد برو",
    "nameEn": "Cold Brew",
-   "categoryId": "cat_cold",
+   "categoryId": "2",
    "description": "",
    "imageUrl": null,
    "priceH": 2200,
    "costH": 540,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "CLD-CBR",
    "barcode": "6287001000097",
@@ -1093,34 +979,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 30
-    },
-    {
-     "ingredientId": "ing_ice",
-     "quantity": 150
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_010",
+   "id": "10",
    "kind": "product",
    "nameAr": "آيس سبانش لاتيه",
    "nameEn": "Iced Spanish Latte",
-   "categoryId": "cat_cold",
+   "categoryId": "2",
    "description": "",
    "imageUrl": null,
    "priceH": 2300,
    "costH": 590,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "CLD-ISP",
    "barcode": "6287001000103",
@@ -1248,42 +1121,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_beans",
-     "quantity": 18
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 180
-    },
-    {
-     "ingredientId": "ing_condensed",
-     "quantity": 30
-    },
-    {
-     "ingredientId": "ing_ice",
-     "quantity": 150
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_011",
+   "id": "11",
    "kind": "product",
    "nameAr": "ماتشا لاتيه",
    "nameEn": "Matcha Latte",
-   "categoryId": "cat_tea",
+   "categoryId": "3",
    "description": "",
    "imageUrl": null,
    "priceH": 2200,
    "costH": 620,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "TEA-MTC",
    "barcode": "6287001000110",
@@ -1369,34 +1221,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_matcha",
-     "quantity": 5
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 200
-    },
-    {
-     "ingredientId": "ing_cup12",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_012",
+   "id": "12",
    "kind": "product",
    "nameAr": "شاي كرك",
    "nameEn": "Karak Tea",
-   "categoryId": "cat_tea",
+   "categoryId": "3",
    "description": "",
    "imageUrl": null,
    "priceH": 900,
    "costH": 180,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_bar",
+   "printGroupId": "1",
    "status": "active",
    "sku": "TEA-KRK",
    "barcode": "6287001000127",
@@ -1436,42 +1275,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_tea",
-     "quantity": 8
-    },
-    {
-     "ingredientId": "ing_milk",
-     "quantity": 150
-    },
-    {
-     "ingredientId": "ing_sugar",
-     "quantity": 15
-    },
-    {
-     "ingredientId": "ing_cardamom",
-     "quantity": 1
-    },
-    {
-     "ingredientId": "ing_cup8",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_013",
+   "id": "13",
    "kind": "product",
    "nameAr": "كرواسون بالزبدة",
    "nameEn": "Butter Croissant",
-   "categoryId": "cat_bakery",
+   "categoryId": "4",
    "description": "",
    "imageUrl": null,
    "priceH": 1200,
    "costH": 420,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_kitchen",
+   "printGroupId": "2",
    "status": "active",
    "sku": "BAK-CRO",
    "barcode": "6287001000134",
@@ -1505,26 +1323,21 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_croissant",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_014",
+   "id": "14",
    "kind": "product",
    "nameAr": "كرواسون زعتر",
    "nameEn": "Zaatar Croissant",
-   "categoryId": "cat_bakery",
+   "categoryId": "4",
    "description": "",
    "imageUrl": null,
    "priceH": 1300,
    "costH": 450,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_kitchen",
+   "printGroupId": "2",
    "status": "active",
    "sku": "BAK-ZTR",
    "barcode": "6287001000141",
@@ -1558,23 +1371,14 @@
    ],
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_croissant",
-     "quantity": 1
-    },
-    {
-     "ingredientId": "ing_zaatar",
-     "quantity": 10
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_015",
+   "id": "15",
    "kind": "product",
    "nameAr": "كوكيز شوكولاتة",
    "nameEn": "Chocolate Chip Cookie",
-   "categoryId": "cat_bakery",
+   "categoryId": "4",
    "description": "",
    "imageUrl": null,
    "priceH": 900,
@@ -1592,26 +1396,21 @@
    "minStockLevel": 20,
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_cookie",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_016",
+   "id": "16",
    "kind": "product",
    "nameAr": "كيكة التمر",
    "nameEn": "Date Cake",
-   "categoryId": "cat_dessert",
+   "categoryId": "5",
    "description": "",
    "imageUrl": null,
    "priceH": 1800,
    "costH": 550,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_kitchen",
+   "printGroupId": "2",
    "status": "active",
    "sku": "DST-DTC",
    "barcode": "6287001000165",
@@ -1622,26 +1421,21 @@
    "minStockLevel": 8,
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_datecake",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_017",
+   "id": "17",
    "kind": "product",
    "nameAr": "سان سباستيان تشيزكيك",
    "nameEn": "San Sebastián Cheesecake",
-   "categoryId": "cat_dessert",
+   "categoryId": "5",
    "description": "",
    "imageUrl": null,
    "priceH": 2600,
    "costH": 840,
    "showOnPos": true,
    "requiresPreparation": true,
-   "printGroupId": "pgr_kitchen",
+   "printGroupId": "2",
    "status": "active",
    "sku": "DST-SSC",
    "barcode": "6287001000172",
@@ -1652,19 +1446,14 @@
    "minStockLevel": 6,
    "createdAt": "2026-08-20T09:00:00.000Z",
    "updatedAt": "2026-08-20T09:00:00.000Z",
-   "recipe": [
-    {
-     "ingredientId": "ing_cheesecake",
-     "quantity": 1
-    }
-   ]
+   "recipe": []
   },
   {
-   "id": "itm_018",
+   "id": "18",
    "kind": "product",
    "nameAr": "بن إثيوبي يرغاتشيفي ٢٥٠ج",
    "nameEn": "Ethiopia Yirgacheffe 250g",
-   "categoryId": "cat_beans",
+   "categoryId": "6",
    "description": "",
    "imageUrl": null,
    "priceH": 8500,
@@ -1681,14 +1470,15 @@
    "stockQuantity": 34,
    "minStockLevel": 10,
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_019",
+   "id": "19",
    "kind": "product",
    "nameAr": "بن كولومبي ٢٥٠ج",
    "nameEn": "Colombia Huila 250g",
-   "categoryId": "cat_beans",
+   "categoryId": "6",
    "description": "",
    "imageUrl": null,
    "priceH": 7800,
@@ -1705,14 +1495,15 @@
    "stockQuantity": 22,
    "minStockLevel": 10,
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_020",
+   "id": "20",
    "kind": "product",
    "nameAr": "بن خولاني سعودي ٢٥٠ج",
    "nameEn": "Saudi Khawlani 250g",
-   "categoryId": "cat_beans",
+   "categoryId": "6",
    "description": "",
    "imageUrl": null,
    "priceH": 9500,
@@ -1729,14 +1520,15 @@
    "stockQuantity": 6,
    "minStockLevel": 8,
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_021",
+   "id": "21",
    "kind": "product",
    "nameAr": "مياه معدنية ٣٣٠ مل",
    "nameEn": "Mineral Water 330ml",
-   "categoryId": "cat_bev",
+   "categoryId": "7",
    "description": "",
    "imageUrl": null,
    "priceH": 300,
@@ -1753,14 +1545,15 @@
    "stockQuantity": 240,
    "minStockLevel": 48,
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_022",
+   "id": "22",
    "kind": "product",
    "nameAr": "مياه غازية ٢٥٠ مل",
    "nameEn": "Sparkling Water 250ml",
-   "categoryId": "cat_bev",
+   "categoryId": "7",
    "description": "",
    "imageUrl": null,
    "priceH": 700,
@@ -1777,14 +1570,15 @@
    "stockQuantity": 36,
    "minStockLevel": 24,
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_101",
+   "id": "23",
    "kind": "service",
    "nameAr": "ورشة تحضير القهوة المقطرة",
    "nameEn": "Home Brewing Workshop",
-   "categoryId": "cat_class",
+   "categoryId": "8",
    "description": "Two hours, V60 and Chemex, beans included.",
    "imageUrl": null,
    "priceH": 25000,
@@ -1796,14 +1590,15 @@
    "durationMinutes": 120,
    "providerId": "stf_003",
    "createdAt": "2026-08-20T09:00:00.000Z",
-   "updatedAt": "2026-08-20T09:00:00.000Z"
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
   },
   {
-   "id": "itm_201",
+   "id": "24",
    "kind": "product",
    "nameAr": "كومبو الفطور",
    "nameEn": "Breakfast Combo",
-   "categoryId": "cat_combo",
+   "categoryId": "9",
    "description": "A pastry, a coffee and water — before 11am.",
    "imageUrl": null,
    "priceH": 2600,
@@ -1828,14 +1623,14 @@
       "nameAr": "المخبوز",
       "nameEn": "Pastry",
       "quantity": 1,
-      "defaultItemId": "itm_013",
+      "defaultItemId": "13",
       "choices": [
        {
-        "itemId": "itm_014",
+        "itemId": "14",
         "priceDeltaH": 100
        },
        {
-        "itemId": "itm_015",
+        "itemId": "15",
         "priceDeltaH": 0
        }
       ]
@@ -1845,22 +1640,22 @@
       "nameAr": "القهوة",
       "nameEn": "Coffee",
       "quantity": 1,
-      "defaultItemId": "itm_002",
+      "defaultItemId": "2",
       "choices": [
        {
-        "itemId": "itm_003",
+        "itemId": "3",
         "priceDeltaH": 300
        },
        {
-        "itemId": "itm_004",
+        "itemId": "4",
         "priceDeltaH": 400
        },
        {
-        "itemId": "itm_005",
+        "itemId": "5",
         "priceDeltaH": 500
        },
        {
-        "itemId": "itm_012",
+        "itemId": "12",
         "priceDeltaH": 0
        }
       ]
@@ -1870,16 +1665,17 @@
       "nameAr": "المياه",
       "nameEn": "Water",
       "quantity": 1,
-      "defaultItemId": "itm_021",
+      "defaultItemId": "21",
       "choices": [
        {
-        "itemId": "itm_022",
+        "itemId": "22",
         "priceDeltaH": 300
        }
       ]
      }
     ]
-   }
+   },
+   "recipe": []
   }
  ],
  "users": [
@@ -1896,7 +1692,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_owner",
+   "id": "1",
    "firstName": "Faisal",
    "lastName": "Al-Rashid",
    "nameAr": "فيصل الراشد",
@@ -1908,11 +1704,9 @@
    "employeeId": "10001",
    "avatarUrl": null,
    "roleId": "rol_owner",
-   "defaultBranchId": "brn_001",
+   "defaultBranchId": "1",
    "branchIds": [
-    "brn_001",
-    "brn_002",
-    "brn_003"
+    "1"
    ],
    "status": "active",
    "extraPermissions": [],
@@ -1936,7 +1730,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_manager",
+   "id": "2",
    "firstName": "Noura",
    "lastName": "Al-Qahtani",
    "nameAr": "نورة القحطاني",
@@ -1948,9 +1742,9 @@
    "employeeId": "10002",
    "avatarUrl": null,
    "roleId": "rol_manager",
-   "defaultBranchId": "brn_001",
+   "defaultBranchId": "1",
    "branchIds": [
-    "brn_001"
+    "1"
    ],
    "status": "active",
    "extraPermissions": [],
@@ -1974,7 +1768,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_cashier",
+   "id": "3",
    "firstName": "Yousef",
    "lastName": "Al-Harbi",
    "nameAr": "يوسف الحربي",
@@ -1986,9 +1780,9 @@
    "employeeId": "10003",
    "avatarUrl": null,
    "roleId": "rol_cashier",
-   "defaultBranchId": "brn_001",
+   "defaultBranchId": "1",
    "branchIds": [
-    "brn_001"
+    "1"
    ],
    "status": "active",
    "extraPermissions": [],
@@ -2022,7 +1816,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_kitchen",
+   "id": "4",
    "firstName": "Omar",
    "lastName": "Bakri",
    "nameAr": "عمر بكري",
@@ -2034,9 +1828,9 @@
    "employeeId": "10004",
    "avatarUrl": null,
    "roleId": "rol_kitchen",
-   "defaultBranchId": "brn_001",
+   "defaultBranchId": "1",
    "branchIds": [
-    "brn_001"
+    "1"
    ],
    "status": "active",
    "extraPermissions": [],
@@ -2065,7 +1859,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_accountant",
+   "id": "5",
    "firstName": "Huda",
    "lastName": "Al-Shammari",
    "nameAr": "هدى الشمري",
@@ -2077,11 +1871,9 @@
    "employeeId": "10005",
    "avatarUrl": null,
    "roleId": "rol_accountant",
-   "defaultBranchId": "brn_001",
+   "defaultBranchId": "1",
    "branchIds": [
-    "brn_001",
-    "brn_002",
-    "brn_003"
+    "1"
    ],
    "status": "active",
    "extraPermissions": [],
@@ -2105,7 +1897,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_cashier2",
+   "id": "6",
    "firstName": "Reem",
    "lastName": "Al-Ghamdi",
    "nameAr": "ريم الغامدي",
@@ -2117,10 +1909,8 @@
    "employeeId": "10006",
    "avatarUrl": null,
    "roleId": "rol_cashier",
-   "defaultBranchId": "brn_002",
-   "branchIds": [
-    "brn_002"
-   ],
+   "defaultBranchId": "1",
+   "branchIds": [],
    "status": "active",
    "extraPermissions": [],
    "deniedPermissions": [],
@@ -2148,7 +1938,7 @@
    ],
    "mustChangePassword": false,
    "passwordChangedAt": "2026-09-01T08:00:00.000Z",
-   "id": "usr_an_cashier3",
+   "id": "7",
    "firstName": "Majed",
    "lastName": "Al-Zahrani",
    "nameAr": "ماجد الزهراني",
@@ -2160,10 +1950,8 @@
    "employeeId": "10007",
    "avatarUrl": null,
    "roleId": "rol_cashier",
-   "defaultBranchId": "brn_003",
-   "branchIds": [
-    "brn_003"
-   ],
+   "defaultBranchId": "1",
+   "branchIds": [],
    "status": "suspended",
    "extraPermissions": [],
    "deniedPermissions": [],

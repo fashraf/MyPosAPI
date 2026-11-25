@@ -20,14 +20,14 @@ public static class CatalogEndpoints
         var g = app.MapGroup("/api/catalog").WithTags("Catalog").RequireAuthorization();
 
         g.MapGet("/items", ListAsync).RequireAuthorization(PermissionPolicy.For("products.view"));
-        g.MapGet("/items/{itemId}", GetAsync).RequireAuthorization(PermissionPolicy.For("products.view"));
-        g.MapPost("/items", (JsonObject body, IDb db, ICurrentUser user, CancellationToken ct) => SaveAsync(null, body, db, user, ct))
+        g.MapGet("/items/{itemId:long}", GetAsync).RequireAuthorization(PermissionPolicy.For("products.view"));
+        g.MapPost("/items", (JsonObject body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct) => SaveAsync(null, body, db, numbers, user, ct))
             .RequireAuthorization(PermissionPolicy.For("products.create"));
-        g.MapPut("/items/{itemId}", (string itemId, JsonObject body, IDb db, ICurrentUser user, CancellationToken ct) => SaveAsync(itemId, body, db, user, ct))
+        g.MapPut("/items/{itemId:long}", (long itemId, JsonObject body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct) => SaveAsync(itemId, body, db, numbers, user, ct))
             .RequireAuthorization(PermissionPolicy.For("products.edit"));
         g.MapGet("/categories", CategoriesAsync).RequireAuthorization(PermissionPolicy.For("products.view"));
-        g.MapPut("/categories/{categoryId}", SaveCategoryAsync).RequireAuthorization(PermissionPolicy.For("products.edit"));
-        g.MapPost("/categories", (JsonObject body, IDb db, CancellationToken ct) => SaveCategoryAsync(TenantSeeder.S(body, "id") ?? $"cat_{Guid.NewGuid():N}"[..16], body, db, ct))
+        g.MapPut("/categories/{categoryId:long}", (long categoryId, JsonObject body, IDb db, INumberSeries numbers, CancellationToken ct) => SaveCategoryAsync(categoryId, body, db, numbers, ct)).RequireAuthorization(PermissionPolicy.For("products.edit"));
+        g.MapPost("/categories", (JsonObject body, IDb db, INumberSeries numbers, CancellationToken ct) => SaveCategoryAsync(null, body, db, numbers, ct))
             .RequireAuthorization(PermissionPolicy.For("products.create"));
         g.MapGet("/print-groups", PrintGroupsAsync).RequireAuthorization(PermissionPolicy.For("products.view"));
     }
@@ -44,7 +44,7 @@ public static class CatalogEndpoints
         {
             var x = q.Query("core.catalog_item");
             if (activeOnly ?? true) x.Where("status", "active");
-            if (!string.IsNullOrWhiteSpace(categoryId)) x.Where("category_id", categoryId);
+            if (long.TryParse(categoryId, out var cat)) x.Where("category_id", cat);
             if (!string.IsNullOrWhiteSpace(kind)) x.Where("kind", kind);
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -63,7 +63,7 @@ public static class CatalogEndpoints
         });
     }
 
-    private static async Task<IResult> GetAsync(string itemId, IDb db, CancellationToken ct)
+    private static async Task<IResult> GetAsync(long itemId, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         object? row = await db.Query(conn).Query("core.catalog_item").Where("item_id", itemId).FirstOrDefaultAsync(cancellationToken: ct);
@@ -71,10 +71,10 @@ public static class CatalogEndpoints
     }
 
     /// <summary>Create or replace an item with the whole document the editor produced.</summary>
-    private static async Task<IResult> SaveAsync(string? itemId, JsonObject body, IDb db, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> SaveAsync(long? itemId, JsonObject body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
     {
-        var id = itemId ?? TenantSeeder.S(body, "id") ?? $"itm_{Guid.NewGuid():N}"[..16];
-        body["id"] = id;
+        /* A new item gets the next integer id; an id the client made up locally (not a number) is ignored. */
+        long id = itemId ?? (long.TryParse(TenantSeeder.S(body, "id"), out var given) ? given : 0);
         if (TenantSeeder.S(body, "nameEn") is null && TenantSeeder.S(body, "nameAr") is null)
             return Results.Json(ApiError.Create("name_required", "Give the item a name.", "أدخل اسم الصنف."), statusCode: 422);
         if (body["priceH"] is not JsonValue p || !p.TryGetValue<double>(out var price) || price < 0)
@@ -85,10 +85,12 @@ public static class CatalogEndpoints
         var setStock = body["setStock"] is JsonValue ss && ss.TryGetValue<bool>(out var flag) && flag;
         body.Remove("setStock");
         var now = DateTime.UtcNow;
-        var row = CatalogRow.From(body, now);
         await db.InTransactionAsync(async (conn, tx) =>
         {
             var q = db.Query(conn);
+            if (id <= 0) id = await numbers.NextAsync(conn, tx, "catalog_item");
+            body["id"] = id.ToString();
+            var row = CatalogRow.From(body, now);
             var exists = await q.Query("core.catalog_item").Where("item_id", id).ExistsAsync(tx);
             if (exists)
             {
@@ -112,16 +114,16 @@ public static class CatalogEndpoints
         {
             var d = (IDictionary<string, object?>)r;
             var doc = Parse(d["details_json"]) ?? new JsonObject();
-            doc["id"] = (string)d["category_id"]!; doc["nameAr"] = (string)d["name_ar"]!; doc["nameEn"] = (string)d["name_en"]!;
+            doc["id"] = Convert.ToInt64(d["category_id"]).ToString(); doc["nameAr"] = (string)d["name_ar"]!; doc["nameEn"] = (string)d["name_en"]!;
             doc["name"] = (string)d["name_en"]!; doc["sortOrder"] = Convert.ToInt32(d["sort_order"]);
             doc["status"] = Convert.ToBoolean(d["is_active"]) ? "active" : "inactive";
             return doc;
         }));
     }
 
-    private static async Task<IResult> SaveCategoryAsync(string categoryId, JsonObject body, IDb db, CancellationToken ct)
+    private static async Task<IResult> SaveCategoryAsync(long? categoryIdIn, JsonObject body, IDb db, INumberSeries numbers, CancellationToken ct)
     {
-        body["id"] = categoryId;
+        long categoryId = categoryIdIn ?? (long.TryParse(TenantSeeder.S(body, "id"), out var given) ? given : 0);
         var now = DateTime.UtcNow;
         var row = new Dictionary<string, object?>
         {
@@ -133,6 +135,8 @@ public static class CatalogEndpoints
         await db.InTransactionAsync(async (conn, tx) =>
         {
             var q = db.Query(conn);
+            if (categoryId <= 0) categoryId = await numbers.NextAsync(conn, tx, "category");
+            body["id"] = categoryId.ToString();
             if (await q.Query("core.category").Where("category_id", categoryId).ExistsAsync(tx))
                 await q.Query("core.category").Where("category_id", categoryId).UpdateAsync(row, tx);
             else
@@ -154,7 +158,7 @@ public static class CatalogEndpoints
             var d = (IDictionary<string, object?>)r;
             return new
             {
-                id = d["print_group_id"], nameAr = d["name_ar"], nameEn = d["name_en"], name = d["name_en"],
+                id = Convert.ToInt64(d["print_group_id"]).ToString(), nameAr = d["name_ar"], nameEn = d["name_en"], name = d["name_en"],
                 ticketTitle = d["ticket_title"], sortOrder = d["sort_order"], status = "active",
             };
         }));
@@ -173,13 +177,14 @@ public static class CatalogRow
         bool B(string k, bool fallback) => item[k] is JsonValue v && v.TryGetValue<bool>(out var b) ? b : fallback;
         decimal D(string k) => item[k] is JsonValue v && v.TryGetValue<double>(out var d) ? (decimal)d : 0m;
         long L(string k) => item[k] is JsonValue v && v.TryGetValue<double>(out var d) ? (long)Math.Round(d) : 0L;
+        static long? N(string? v) => long.TryParse(v, out var n) ? n : null;
         var isCombo = item["combo"] is JsonObject c && c["slots"] is JsonArray slots && slots.Count > 0;
 
         return new Dictionary<string, object?>
         {
-            ["item_id"] = S("id"), ["kind"] = S("kind") ?? "product",
+            ["item_id"] = long.Parse(S("id")!), ["kind"] = S("kind") ?? "product",
             ["name_ar"] = S("nameAr") ?? S("nameEn") ?? "", ["name_en"] = S("nameEn") ?? S("nameAr") ?? "",
-            ["category_id"] = S("categoryId"), ["print_group_id"] = S("printGroupId"),
+            ["category_id"] = N(S("categoryId")), ["print_group_id"] = N(S("printGroupId")),
             ["sku"] = S("sku"), ["barcode"] = S("barcode"), ["price_h"] = L("priceH"), ["cost_h"] = L("costH"),
             ["tax_rate_id"] = S("taxRateId"), ["show_on_pos"] = B("showOnPos", true),
             ["requires_preparation"] = B("requiresPreparation", false), ["track_inventory"] = B("trackInventory", false),
@@ -192,14 +197,15 @@ public static class CatalogRow
     public static JsonObject ToDocument(IDictionary<string, object?> r)
     {
         var doc = CatalogEndpoints.Parse(r["details_json"]) ?? new JsonObject();
-        var id = (string)r["item_id"]!;
+        var id = Convert.ToInt64(r["item_id"]).ToString();
         var nameEn = (string)r["name_en"]!;
         var active = (string)r["status"]! == "active";
         var stock = Convert.ToDecimal(r["stock_quantity"]);
         /* Columns win: price, stock and status may have changed since the document was saved (a sale moves stock). */
         doc["id"] = id; doc["kind"] = (string)r["kind"]!;
         doc["nameAr"] = (string)r["name_ar"]!; doc["nameEn"] = nameEn;
-        doc["categoryId"] = r["category_id"] as string; doc["printGroupId"] = r["print_group_id"] as string;
+        doc["categoryId"] = r["category_id"] is null ? null : Convert.ToInt64(r["category_id"]).ToString();
+        doc["printGroupId"] = r["print_group_id"] is null ? null : Convert.ToInt64(r["print_group_id"]).ToString();
         doc["priceH"] = Convert.ToInt64(r["price_h"]); doc["costH"] = Convert.ToInt64(r["cost_h"]);
         doc["status"] = (string)r["status"]!; doc["showOnPos"] = Convert.ToBoolean(r["show_on_pos"]);
         doc["requiresPreparation"] = Convert.ToBoolean(r["requires_preparation"]);

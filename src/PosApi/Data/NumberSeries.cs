@@ -11,15 +11,35 @@ namespace PosApi.Data;
 public interface INumberSeries
 {
     Task<long> NextAsync(DbConnection connection, DbTransaction tx, string key, string scope = "*");
+    Task EnsureAtLeastAsync(DbConnection connection, DbTransaction tx, string key, long value, string scope = "*");
 }
 
 public sealed class NumberSeries(IDb db) : INumberSeries
 {
     /// <summary>First number handed out = start + 1 (invoice 100001, credit note 500001, receipt 700001).</summary>
+    /// <summary>The value BEFORE the first number: invoice 0 means the first invoice is 1.</summary>
     public static readonly IReadOnlyDictionary<string, long> Starts = new Dictionary<string, long>
     {
-        ["invoice"] = 100000, ["credit_note"] = 500000, ["receipt"] = 700000, ["session"] = 1000, ["employee"] = 1000, ["branch"] = 99,
+        ["invoice"] = 0, ["credit_note"] = 500000, ["receipt"] = 700000, ["session"] = 1000, ["employee"] = 1000,
+        ["branch"] = 0, ["user"] = 0, ["catalog_item"] = 0, ["category"] = 0, ["print_group"] = 0,
+        ["session_movement"] = 0, ["session_audit"] = 0,
     };
+
+    /// <summary>After rows were inserted with explicit ids (the seed), make sure the next number is above them.</summary>
+    public async Task EnsureAtLeastAsync(DbConnection connection, DbTransaction tx, string key, long value, string scope = "*")
+    {
+        var q = db.Query(connection);
+        var row = await q.Query("number_series").Where("series_key", key).Where("scope_id", scope).FirstOrDefaultAsync(tx);
+        if (row is null)
+        {
+            var start = Starts.TryGetValue(key, out var s) ? s : 0;
+            await q.Query("number_series").InsertAsync(new { series_key = key, scope_id = scope, last_value = Math.Max(start, value) }, tx);
+        }
+        else if (Convert.ToInt64(((IDictionary<string, object?>)row)["last_value"]) < value)
+        {
+            await q.Query("number_series").Where("series_key", key).Where("scope_id", scope).UpdateAsync(new { last_value = value }, tx);
+        }
+    }
 
     public async Task<long> NextAsync(DbConnection connection, DbTransaction tx, string key, string scope = "*")
     {

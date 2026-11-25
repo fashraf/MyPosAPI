@@ -128,6 +128,16 @@ public sealed class AuditDrainService : BackgroundService
                              @CurrentPage, @PreviousPage, @TotalMs, @DatabaseMs, @QueryCount,
                              @StatusCode, @Succeeded, @ErrorMessage, @ResponseBytes)
                         """, timing);
+                    foreach (var q in timing.Queries)
+                    {
+                        await connection.ExecuteAsync(
+                            """
+                            INSERT INTO audit.query_timing
+                                (correlation_id, seq, command_text, parameter_names, duration_ms, rows_affected, occurred_at_utc)
+                            VALUES (@CorrelationId, @Seq, @CommandText, @ParameterNames, @DurationMs, @RowsAffected, @AtUtc)
+                            """,
+                            new { timing.CorrelationId, q.Seq, q.CommandText, q.ParameterNames, DurationMs = (decimal)q.DurationMs, q.RowsAffected, q.AtUtc });
+                    }
                 }
             }
             catch (Exception ex)

@@ -26,8 +26,8 @@ public static class SalesEndpoints
 
         g.MapPost("", CommitAsync).RequireAuthorization(PermissionPolicy.For("pos.create_sale"));
         g.MapGet("", ListAsync).RequireAuthorization(PermissionPolicy.For("sales.view"));
-        g.MapGet("/{saleId}", GetAsync).RequireAuthorization(PermissionPolicy.For("sales.view"));
-        g.MapPost("/{saleId}/void", VoidAsync).RequireAuthorization(PermissionPolicy.For("sales.void"));
+        g.MapGet("/{saleId:long}", GetAsync).RequireAuthorization(PermissionPolicy.For("sales.view"));
+        g.MapPost("/{saleId:long}/void", VoidAsync).RequireAuthorization(PermissionPolicy.For("sales.void"));
     }
 
     public sealed record CommitRequest(JsonObject Sale, string? IdempotencyKey, List<StockMove>? StockMovements);
@@ -73,7 +73,8 @@ public static class SalesEndpoints
                 /* No business day, no order. */
                 var session = await RestaurantSessionEndpoints.OpenSession(q, branchId, null, tx)
                     ?? throw new RuleException(409, "restaurant_closed", "The restaurant is closed. Open it before taking orders.", "المطعم مغلق. افتحه قبل استقبال الطلبات.");
-                var sessionId = (string)session["session_id"]!;
+                var sessionId = Convert.ToInt64(session["session_id"]);
+                var branchKey = Convert.ToInt64(session["branch_id"]);
 
                 var invoiceNo = await numbers.NextAsync(conn, tx, "invoice");
                 var orderNo = Convert.ToInt32(session["last_order_no"]) + 1;
@@ -100,11 +101,11 @@ public static class SalesEndpoints
                     await q.Query("sales.zatca_chain").Where("egs_unit_id", egs).UpdateAsync(new Dictionary<string, object?> { ["icv"] = icv, ["last_hash"] = hash, ["updated_at_utc"] = now }, tx);
 
                 /* The document the till keeps, with the server's numbers and stamp. */
-                var saleId = TenantSeeder.S(sale, "id") is { } given && given.Length <= 60 ? given : $"sal_{Guid.NewGuid():N}"[..20];
-                if (await q.Query("sales.sale").Where("sale_id", saleId).ExistsAsync(tx)) saleId = $"sal_{Guid.NewGuid():N}"[..20];
+                /* The sale's key is its invoice number: unique, numeric, 1, 2, 3 … */
+                var saleId = invoiceNo;
                 var document = (JsonObject)sale.DeepClone();
-                document["id"] = saleId; document["invoiceNumber"] = invoiceNumber; document["orderNo"] = orderNo;
-                document["sessionId"] = sessionId; document["status"] = "completed"; document["soldAt"] = issuedAt;
+                document["id"] = saleId.ToString(CultureInfo.InvariantCulture); document["invoiceNumber"] = invoiceNumber; document["orderNo"] = orderNo;
+                document["sessionId"] = sessionId.ToString(CultureInfo.InvariantCulture); document["status"] = "completed"; document["soldAt"] = issuedAt;
                 document["createdAt"] = issuedAt; document["updatedAt"] = issuedAt;
                 var zatca = document["zatca"] as JsonObject ?? new JsonObject();
                 zatca["uuid"] = uuid; zatca["icv"] = icv; zatca["invoiceHash"] = hash; zatca["previousInvoiceHash"] = pih;
@@ -117,9 +118,9 @@ public static class SalesEndpoints
                 await q.Query("sales.sale").InsertAsync(new Dictionary<string, object?>
                 {
                     ["sale_id"] = saleId, ["invoice_no"] = invoiceNo, ["order_no"] = orderNo, ["session_id"] = sessionId,
-                    ["branch_id"] = branchId, ["status"] = "completed", ["order_type"] = TenantSeeder.S(sale, "orderType"),
+                    ["branch_id"] = branchKey, ["status"] = "completed", ["order_type"] = TenantSeeder.S(sale, "orderType"),
                     ["customer_id"] = TenantSeeder.S(sale, "customerId"), ["cashier_name"] = TenantSeeder.S(sale, "cashierName") ?? user.Username,
-                    ["created_by_id"] = user.UserId, ["item_count"] = lines.Sum(l => D(l, "quantity")),
+                    ["created_by_id"] = RestaurantSessionEndpoints.UserKey(user.UserId), ["item_count"] = lines.Sum(l => D(l, "quantity")),
                     ["subtotal_h"] = subtotal, ["discount_h"] = discount, ["tax_h"] = tax, ["total_h"] = total,
                     ["tendered_h"] = sale["tenderedH"] is JsonValue ? L(sale, "tenderedH") : null, ["change_h"] = L(sale, "changeH"),
                     ["idempotency_key"] = key, ["zatca_uuid"] = uuid, ["zatca_icv"] = icv, ["zatca_pih"] = pih,
@@ -136,7 +137,7 @@ public static class SalesEndpoints
                         TenantSeeder.Arr(l, "components").Select(c => TenantSeeder.S(c, "nameEn"))).Where(x => x is not null));
                     await q.Query("sales.sale_line").InsertAsync(new Dictionary<string, object?>
                     {
-                        ["sale_id"] = saleId, ["line_no"] = ++lineNo, ["item_id"] = TenantSeeder.S(l, "itemId") ?? "",
+                        ["sale_id"] = saleId, ["line_no"] = ++lineNo, ["item_id"] = ItemKey(TenantSeeder.S(l, "itemId")),
                         ["name_ar"] = TenantSeeder.S(l, "nameAr") ?? "", ["name_en"] = TenantSeeder.S(l, "nameEn") ?? "",
                         ["quantity"] = qty, ["unit_price_h"] = unit, ["unit_cost_h"] = L(l, "unitCostH"), ["discount_h"] = lineDiscount,
                         ["line_total_h"] = (long)Math.Round(unit * qty) - lineDiscount,
@@ -159,12 +160,12 @@ public static class SalesEndpoints
                     : lines.Select(l => new StockMove(TenantSeeder.S(l, "itemId") ?? "", D(l, "quantity"))).ToList();
                 foreach (var m in moves.GroupBy(m => m.ItemId).Select(g => new StockMove(g.Key, g.Sum(x => x.Quantity))))
                 {
-                    if (string.IsNullOrWhiteSpace(m.ItemId) || m.Quantity <= 0) continue;
-                    var item = await q.Query("core.catalog_item").Where("item_id", m.ItemId).Where("track_inventory", true)
+                    if (!long.TryParse(m.ItemId, out var stockItem) || m.Quantity <= 0) continue;
+                    var item = await q.Query("core.catalog_item").Where("item_id", stockItem).Where("track_inventory", true)
                         .Select("stock_quantity").FirstOrDefaultAsync(tx);
                     if (item is null) continue;
                     var left = Convert.ToDecimal(((IDictionary<string, object?>)item)["stock_quantity"]) - m.Quantity;
-                    await q.Query("core.catalog_item").Where("item_id", m.ItemId)
+                    await q.Query("core.catalog_item").Where("item_id", stockItem)
                         .UpdateAsync(new Dictionary<string, object?> { ["stock_quantity"] = left, ["updated_at_utc"] = now }, tx);
                 }
 
@@ -187,8 +188,8 @@ public static class SalesEndpoints
         SqlKata.Query Base()
         {
             var x = db.Query(conn).Query("sales.sale");
-            if (!string.IsNullOrWhiteSpace(branchId)) x.Where("branch_id", branchId);
-            if (!string.IsNullOrWhiteSpace(sessionId)) x.Where("session_id", sessionId);
+            if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
+            if (long.TryParse(sessionId, out var session)) x.Where("session_id", session);
             if (from is { } f) x.Where("sold_at_utc", ">=", f.ToDateTime(TimeOnly.MinValue).AddHours(-3));
             if (to is { } t) x.Where("sold_at_utc", "<", t.AddDays(1).ToDateTime(TimeOnly.MinValue).AddHours(-3));
             if (!string.IsNullOrWhiteSpace(search) && long.TryParse(search.Trim(), out var n)) x.Where("invoice_no", n);
@@ -203,7 +204,7 @@ public static class SalesEndpoints
         });
     }
 
-    private static async Task<IResult> GetAsync(string saleId, IDb db, CancellationToken ct)
+    private static async Task<IResult> GetAsync(long saleId, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         object? row = await db.Query(conn).Query("sales.sale").Where("sale_id", saleId).FirstOrDefaultAsync(cancellationToken: ct);
@@ -213,7 +214,7 @@ public static class SalesEndpoints
     }
 
     /// <summary>Cancel a sale: it stays on record (an issued invoice is never deleted) and its stock goes back.</summary>
-    private static async Task<IResult> VoidAsync(string saleId, VoidRequest body, IDb db, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> VoidAsync(long saleId, VoidRequest body, IDb db, ICurrentUser user, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(body.Reason)) return Error(422, "reason_required", "Give a reason for cancelling.", "اذكر سبب الإلغاء.");
         var actor = string.IsNullOrWhiteSpace(body.VoidedBy) ? user.Username : body.VoidedBy!;
@@ -238,10 +239,10 @@ public static class SalesEndpoints
                 foreach (var line in await q.Query("sales.sale_line").Where("sale_id", saleId).GetAsync(tx))
                 {
                     var l = RestaurantSessionEndpoints.Row(line);
-                    var item = await q.Query("core.catalog_item").Where("item_id", (string)l["item_id"]!).Where("track_inventory", true)
+                    var item = await q.Query("core.catalog_item").Where("item_id", Convert.ToInt64(l["item_id"])).Where("track_inventory", true)
                         .Select("stock_quantity").FirstOrDefaultAsync(tx);
                     if (item is null) continue;
-                    await q.Query("core.catalog_item").Where("item_id", (string)l["item_id"]!).UpdateAsync(new Dictionary<string, object?>
+                    await q.Query("core.catalog_item").Where("item_id", Convert.ToInt64(l["item_id"])).UpdateAsync(new Dictionary<string, object?>
                     {
                         ["stock_quantity"] = Convert.ToDecimal(((IDictionary<string, object?>)item)["stock_quantity"]) + Convert.ToDecimal(l["quantity"]),
                         ["updated_at_utc"] = now,
@@ -261,13 +262,17 @@ public static class SalesEndpoints
     {
         var doc = CatalogEndpoints.Parse(r["document_json"]) ?? new JsonObject();
         /* Columns win over the stored document. */
-        doc["id"] = (string)r["sale_id"]!; doc["invoiceNumber"] = Convert.ToInt64(r["invoice_no"]).ToString(CultureInfo.InvariantCulture);
-        doc["orderNo"] = Convert.ToInt32(r["order_no"]); doc["sessionId"] = (string)r["session_id"]!;
-        doc["branchId"] = (string)r["branch_id"]!; doc["status"] = (string)r["status"]!;
+        doc["id"] = Convert.ToInt64(r["sale_id"]).ToString(CultureInfo.InvariantCulture); doc["invoiceNumber"] = Convert.ToInt64(r["invoice_no"]).ToString(CultureInfo.InvariantCulture);
+        doc["orderNo"] = Convert.ToInt32(r["order_no"]); doc["sessionId"] = Convert.ToInt64(r["session_id"]).ToString(CultureInfo.InvariantCulture);
+        doc["branchId"] = Convert.ToInt64(r["branch_id"]).ToString(CultureInfo.InvariantCulture); doc["status"] = (string)r["status"]!;
         doc["totalH"] = Convert.ToInt64(r["total_h"]); doc["taxH"] = Convert.ToInt64(r["tax_h"]);
         doc["subtotalH"] = Convert.ToInt64(r["subtotal_h"]); doc["discountH"] = Convert.ToInt64(r["discount_h"]);
         return doc;
     }
+
+    /// <summary>Item ids are integers; a line with an id that is not a number cannot be sold.</summary>
+    private static long ItemKey(string? value) =>
+        long.TryParse(value, out var id) ? id : throw new RuleException(422, "unknown_item", "One of the items is not in the catalog.", "أحد الأصناف غير موجود في القائمة.");
 
     private static IResult Error(int status, string code, string en, string ar) =>
         Results.Json(ApiError.Create(code, en, ar), statusCode: status);

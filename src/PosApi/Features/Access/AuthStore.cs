@@ -50,12 +50,12 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
 
     public Task<AuthUser?> FindByIdentifierAsync(DbConnection c, string identifier, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
-            "SELECT user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE email = @Identifier OR phone = @Identifier OR username = @Identifier",
+            "SELECT CAST(user_id AS VARCHAR(20)) AS user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE email = @Identifier OR phone = @Identifier OR username = @Identifier",
             new { Identifier = identifier }, cancellationToken: ct));
 
     public Task<AuthUser?> FindByIdAsync(DbConnection c, string userId, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
-            "SELECT user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE user_id = @UserId", new { UserId = userId }, cancellationToken: ct));
+            "SELECT CAST(user_id AS VARCHAR(20)) AS user_id, username, name_ar, name_en, role_id, status, access_expires_on, password_hash, password_salt FROM core.app_user WHERE user_id = @UserId", new { UserId = Id(userId) }, cancellationToken: ct));
 
     /// <summary>Role permissions plus explicit grants, minus explicit denials (a denial always wins).</summary>
     public async Task<IReadOnlyList<string>> PermissionsAsync(DbConnection c, string userId, CancellationToken ct) =>
@@ -69,11 +69,11 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
                               WHERE o.user_id = u.user_id AND o.permission_key = p.permission_key AND o.effect = 'grant'))
               AND NOT EXISTS (SELECT 1 FROM core.user_permission_override d
                               WHERE d.user_id = u.user_id AND d.permission_key = p.permission_key AND d.effect = 'deny')
-            """, new { UserId = userId }, cancellationToken: ct))).ToList();
+            """, new { UserId = Id(userId) }, cancellationToken: ct))).ToList();
 
     public async Task<IReadOnlyList<string>> BranchesAsync(DbConnection c, string userId, CancellationToken ct) =>
         (await c.QueryAsync<string>(new CommandDefinition(
-            "SELECT branch_id FROM core.user_branch WHERE user_id = @UserId", new { UserId = userId }, cancellationToken: ct))).ToList();
+            "SELECT CAST(branch_id AS VARCHAR(20)) FROM core.user_branch WHERE user_id = @UserId", new { UserId = Id(userId) }, cancellationToken: ct))).ToList();
 
     public Task<string?> ChallengeIdentifierAsync(DbConnection c, string challengeId, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
@@ -84,16 +84,16 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
         await using var tx = await c.BeginTransactionAsync(ct);
         await c.ExecuteAsync(new CommandDefinition(
             "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc) VALUES (@Hash, @UserId, @Now, @Expires)",
-            new { Hash = tokenHash, UserId = userId, Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
+            new { Hash = tokenHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
         await c.ExecuteAsync(new CommandDefinition(
             "UPDATE core.app_user SET last_login_at_utc = @Now WHERE user_id = @UserId",
-            new { Now = DateTime.UtcNow, UserId = userId }, tx, cancellationToken: ct));
+            new { Now = DateTime.UtcNow, UserId = Id(userId) }, tx, cancellationToken: ct));
         await tx.CommitAsync(ct);
     }
 
     public Task<string?> ActiveRefreshTokenUserAsync(DbConnection c, string tokenHash, CancellationToken ct) =>
         c.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            "SELECT user_id FROM core.refresh_token WHERE token_hash = @Hash AND revoked_at_utc IS NULL AND expires_at_utc > @Now",
+            "SELECT CAST(user_id AS VARCHAR(20)) FROM core.refresh_token WHERE token_hash = @Hash AND revoked_at_utc IS NULL AND expires_at_utc > @Now",
             new { Hash = tokenHash, Now = DateTime.UtcNow }, cancellationToken: ct));
 
     public async Task RotateRefreshTokenAsync(DbConnection c, string oldHash, string newHash, string userId, DateTime expiresAtUtc, CancellationToken ct)
@@ -104,7 +104,7 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
             new { Now = DateTime.UtcNow, OldHash = oldHash }, tx, cancellationToken: ct));
         await c.ExecuteAsync(new CommandDefinition(
             "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc) VALUES (@Hash, @UserId, @Now, @Expires)",
-            new { Hash = newHash, UserId = userId, Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
+            new { Hash = newHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
         await tx.CommitAsync(ct);
     }
 
@@ -135,8 +135,8 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
                 return (RegistrationError.MobileTaken, null, null);
 
             var seq = await numbers.NextAsync(c, tx, "branch");
-            var branchId = $"brn_{seq:000}";
-            var userId = $"usr_{Guid.NewGuid():N}";
+            var branchId = seq;                                        // integer keys: branch 1, 2 …
+            var userId = await numbers.NextAsync(c, tx, "user");
             var now = DateTime.UtcNow;
 
             if (!await q.Query("core.company").ExistsAsync(tx))
@@ -159,7 +159,10 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
                 created_at_utc = now, created_by = "registration", updated_at_utc = now,
             }, tx);
             await q.Query("core.user_branch").InsertAsync(new { user_id = userId, branch_id = branchId }, tx);
-            return (RegistrationError.None, userId, branchId);
+            return (RegistrationError.None, userId.ToString(), branchId.ToString());
         }, ct);
     }
+
+    /// <summary>Ids are integers in the database and text ("1") in tokens and JSON.</summary>
+    private static long Id(string? value) => long.TryParse(value, out var id) ? id : -1;
 }
