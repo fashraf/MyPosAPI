@@ -39,7 +39,9 @@ public sealed class AuditMiddleware
         var path = context.Request.Path.Value ?? string.Empty;
 
         // Static assets and the health checks would swamp the table.
-        if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+        /* The order light polls every few seconds; logging each poll would bury the real activity. */
+        if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(PosApi.Features.OrderLight.OrderLightEndpoints.Path, StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);
             return;

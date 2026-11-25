@@ -34,7 +34,7 @@ public static class SalesEndpoints
     public sealed record StockMove(string ItemId, decimal Quantity);
     public sealed record VoidRequest(string Reason, string? Code, string? VoidedBy);
 
-    private static async Task<IResult> CommitAsync(CommitRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> CommitAsync(CommitRequest body, IDb db, INumberSeries numbers, ICurrentUser user, PosApi.Features.OrderLight.OrderFeed feed, CancellationToken ct)
     {
         var sale = body.Sale;
         var key = body.IdempotencyKey ?? TenantSeeder.S(sale, "idempotencyKey");
@@ -57,11 +57,13 @@ public static class SalesEndpoints
         if (payments.Any(p => TenantSeeder.S(p, "method") == "credit") && TenantSeeder.S(sale, "customerId") is null)
             return Error(422, "customer_required", "A credit sale needs a customer on the invoice.", "البيع الآجل يحتاج إلى عميل على الفاتورة.");
 
+        var created = false;
         try
         {
             var doc = await db.InTransactionAsync(async (conn, tx) =>
             {
                 var q = db.Query(conn);
+                created = false;
 
                 /* Same attempt sent twice (a retry after a timeout): return the original. */
                 if (!string.IsNullOrWhiteSpace(key))
@@ -169,8 +171,13 @@ public static class SalesEndpoints
                         .UpdateAsync(new Dictionary<string, object?> { ["stock_quantity"] = left, ["updated_at_utc"] = now }, tx);
                 }
 
+                created = true;
                 return document;
             }, ct);
+            /* Announced only after the commit succeeded, and never for a replayed retry. */
+            if (created)
+                feed.Publish(long.Parse(doc["invoiceNumber"]!.ToString()), (int)doc["orderNo"]!, L(doc, "totalH"),
+                    TenantSeeder.S(doc, "branchId") ?? "", TenantSeeder.S(doc, "orderType"));
             return Results.Ok(doc);
         }
         catch (RuleException r)
@@ -236,7 +243,7 @@ public static class SalesEndpoints
                     ["status"] = "voided", ["void_reason"] = body.Reason, ["voided_at_utc"] = now, ["voided_by"] = actor,
                     ["document_json"] = document.ToJsonString(), ["updated_at_utc"] = now,
                 }, tx);
-                foreach (var line in await q.Query("sales.sale_line").Where("sale_id", saleId).GetAsync(tx))
+                foreach (object line in await q.Query("sales.sale_line").Where("sale_id", saleId).GetAsync(tx))
                 {
                     var l = RestaurantSessionEndpoints.Row(line);
                     var item = await q.Query("core.catalog_item").Where("item_id", Convert.ToInt64(l["item_id"])).Where("track_inventory", true)

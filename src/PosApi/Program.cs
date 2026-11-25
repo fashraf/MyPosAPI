@@ -208,6 +208,7 @@ try
     builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
     builder.Services.AddScoped<IOtpService, OtpService>();
     builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+    builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
     builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
@@ -502,6 +503,7 @@ try
     app.MapCatalogEndpoints();
 
     app.MapSalesEndpoints();
+    PosApi.Features.OrderLight.OrderLightEndpoints.MapOrderLightEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
