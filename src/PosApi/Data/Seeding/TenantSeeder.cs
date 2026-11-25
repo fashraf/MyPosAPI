@@ -30,6 +30,19 @@ public static class TenantSeeder
             async Task<bool> Exists(string table, string key, object value) =>
                 await q.Query(table).Where(key, value).ExistsAsync(tx);
 
+            /* Older QA runs registered a placeholder "QA Business"; the setup company replaces it (receipts and the
+               ZATCA stamp carry the company's name and VAT number). */
+            if (root["company"] is JsonObject seedCo && await q.Query("core.company").Where("name_en", "QA Business").ExistsAsync(tx))
+            {
+                await q.Query("core.company").Where("name_en", "QA Business").UpdateAsync(new Dictionary<string, object?>
+                {
+                    ["name_ar"] = S(seedCo, "nameAr") ?? S(seedCo, "nameEn") ?? "", ["name_en"] = S(seedCo, "nameEn") ?? "",
+                    ["vat_number"] = S(seedCo, "vatNumber"), ["cr_number"] = S(seedCo, "crNumber"), ["city"] = S(seedCo, "city"),
+                    ["updated_at_utc"] = now,
+                }, tx);
+                Count("company (replaced QA placeholder)");
+            }
+
             /* Company: only when the database has none (one business per database). */
             if (root["company"] is JsonObject co && !await q.Query("core.company").ExistsAsync(tx))
             {

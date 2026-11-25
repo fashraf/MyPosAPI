@@ -264,6 +264,7 @@ try
         o.ForwardLimit = 1;
     });
 
+    var authPermitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10));
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -273,7 +274,9 @@ try
                 partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 10,
+                    /* 10 a minute per address in production; staging raises it (RateLimiting:AuthPermitLimit) so the QA
+                       suite, which signs in many times from one address, is not refused. */
+                    PermitLimit = authPermitLimit,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0
                 }));

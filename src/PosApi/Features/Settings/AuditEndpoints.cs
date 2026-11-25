@@ -218,6 +218,9 @@ public static class AuditEndpoints
             .SelectRaw("SUM(CASE WHEN total_ms >= 1000 AND total_ms < 2000 THEN 1 ELSE 0 END) AS \"SlowCalls\"")
             .FirstOrDefaultAsync(cancellationToken: ct);
 
+        /* AVG comes back as an unrounded decimal on some engines (18.1623…): whole milliseconds on the screen. */
+        if (summary is IDictionary<string, object?> sum && sum.TryGetValue("AvgMs", out var avgMs) && avgMs is not null)
+            sum["AvgMs"] = (long)Math.Round(Convert.ToDouble(avgMs));
         return Results.Ok(new { endpoints, summary });
     }
 
