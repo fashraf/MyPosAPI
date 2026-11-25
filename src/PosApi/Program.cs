@@ -512,7 +512,18 @@ try
     app.MapGet("/health/db", async (PosApi.Data.IDb db, CancellationToken ct) =>
     {
         await using var connection = await db.OpenAsync(ct);
-        return Results.Ok(new { status = "ok", provider = db.Provider.Name, database = connection.Database });
+        var q = db.Query(connection);
+        // Proof that this is the database the migrations ran on: latest schema version and table/user counts.
+        long? schemaVersion = null; int tables = 0, users = 0;
+        try
+        {
+            schemaVersion = await SqlKata.Execution.QueryExtensions.MaxAsync<long?>(q.Query("VersionInfo"), "Version", cancellationToken: ct);
+            tables = await SqlKata.Execution.QueryExtensions.CountAsync<int>(
+                q.Query("information_schema.tables").WhereIn("table_schema", new[] { "core", "audit" }), cancellationToken: ct);
+            users = await SqlKata.Execution.QueryExtensions.CountAsync<int>(q.Query("core.app_user"), cancellationToken: ct);
+        }
+        catch (Exception) { /* not migrated yet: report what we have */ }
+        return Results.Ok(new { status = "ok", provider = db.Provider.Name, database = connection.Database, schemaVersion, tables, users });
     }).AllowAnonymous().WithTags("Health");
 
     /*
