@@ -39,14 +39,14 @@ public static class RestaurantSessionEndpoints
         g.MapGet("/status", StatusAsync).RequireAuthorization(PermissionPolicy.For(View));
         g.MapGet("/current", CurrentAsync).RequireAuthorization(PermissionPolicy.For(View));
         g.MapGet("/history", HistoryAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
-        g.MapGet("/{id}", GetAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapGet("/{id}/cash-movements", MovementsAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.view"));
-        g.MapGet("/{id}/audit-log", AuditAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
-        g.MapGet("/{id}/closing-preview", PreviewAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reconcile"));
+        g.MapGet("/{id:long}", GetAsync).RequireAuthorization(PermissionPolicy.For(View));
+        g.MapGet("/{id:long}/cash-movements", MovementsAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.view"));
+        g.MapGet("/{id:long}/audit-log", AuditAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
+        g.MapGet("/{id:long}/closing-preview", PreviewAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reconcile"));
         g.MapPost("/open", OpenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.open"));
-        g.MapPost("/{id}/cash-movements", AddMovementAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.create"));
-        g.MapPost("/{id}/close", CloseAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.close"));
-        g.MapPost("/{id}/reopen", ReopenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reopen"));
+        g.MapPost("/{id:long}/cash-movements", AddMovementAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.create"));
+        g.MapPost("/{id:long}/close", CloseAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.close"));
+        g.MapPost("/{id:long}/reopen", ReopenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reopen"));
     }
 
     /* ---------------------------------------------------------------- reads */
@@ -58,9 +58,9 @@ public static class RestaurantSessionEndpoints
         var q = db.Query(conn);
         var since = DateTime.UtcNow.Date.AddDays(-Math.Clamp(days, 1, 400));
         var s = q.Query("sales.restaurant_session").Where(w => w.Where("opened_at_utc", ">=", since).OrWhere("status", "open"));
-        if (!string.IsNullOrWhiteSpace(branchId)) s.Where("branch_id", branchId);
+        if (long.TryParse(branchId, out var branch)) s.Where("branch_id", branch);
         var sessions = (await s.OrderByDesc("opened_at_utc").GetAsync(cancellationToken: ct)).Select(Row).ToList();
-        var ids = sessions.Select(x => (string)x["session_id"]!).ToArray();
+        var ids = sessions.Select(x => Convert.ToInt64(x["session_id"])).ToArray();
 
         var movements = ids.Length == 0 ? new List<JsonObject>() : (await q.Query("sales.session_movement").WhereIn("session_id", ids)
             .OrderBy("created_at_utc").GetAsync(cancellationToken: ct)).Select(Row).Select(MovementDoc).ToList();
@@ -81,7 +81,7 @@ public static class RestaurantSessionEndpoints
     {
         await using var conn = await db.OpenAsync(ct);
         var x = db.Query(conn).Query("sales.restaurant_session");
-        if (!string.IsNullOrWhiteSpace(branchId)) x.Where("branch_id", branchId);
+        if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
         if (includeClosed != true) x.Where("status", "open");
         object? row = await x.OrderByDesc("opened_at_utc").FirstOrDefaultAsync(cancellationToken: ct);
         return Results.Ok(row is null ? null : SessionDoc(Row(row)));
@@ -94,7 +94,7 @@ public static class RestaurantSessionEndpoints
         SqlKata.Query Base()
         {
             var x = db.Query(conn).Query("sales.restaurant_session");
-            if (!string.IsNullOrWhiteSpace(branchId)) x.Where("branch_id", branchId);
+            if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
             return x;
         }
         var total = await Base().CountAsync<int>(cancellationToken: ct);
@@ -105,21 +105,21 @@ public static class RestaurantSessionEndpoints
         });
     }
 
-    private static async Task<IResult> GetAsync(string id, IDb db, CancellationToken ct)
+    private static async Task<IResult> GetAsync(long id, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         object? row = await db.Query(conn).Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(cancellationToken: ct);
         return row is null ? NotFound() : Results.Ok(SessionDoc(Row(row)));
     }
 
-    private static async Task<IResult> MovementsAsync(string id, IDb db, CancellationToken ct)
+    private static async Task<IResult> MovementsAsync(long id, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         var rows = await db.Query(conn).Query("sales.session_movement").Where("session_id", id).OrderBy("created_at_utc").GetAsync(cancellationToken: ct);
         return Results.Ok(rows.Select(Row).Select(MovementDoc));
     }
 
-    private static async Task<IResult> AuditAsync(string id, IDb db, CancellationToken ct)
+    private static async Task<IResult> AuditAsync(long id, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         var rows = await db.Query(conn).Query("sales.session_audit").Where("session_id", id).OrderBy("created_at_utc").GetAsync(cancellationToken: ct);
@@ -127,7 +127,7 @@ public static class RestaurantSessionEndpoints
     }
 
     /// <summary>The expected cash in the drawer right now, worked out on the server.</summary>
-    private static async Task<IResult> PreviewAsync(string id, IDb db, CancellationToken ct)
+    private static async Task<IResult> PreviewAsync(long id, IDb db, CancellationToken ct)
     {
         await using var conn = await db.OpenAsync(ct);
         object? row = await db.Query(conn).Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(cancellationToken: ct);
@@ -158,18 +158,18 @@ public static class RestaurantSessionEndpoints
                     throw new ConflictException(SessionDoc(already));
 
                 var no = await numbers.NextAsync(conn, tx, "session");
-                var id = $"rss_{body.BranchId}_{no}";
+                var id = no;                                    // the session number is its key: 1001, 1002 …
                 var businessDate = body.BusinessDate ?? DateOnly.FromDateTime(RiyadhBusinessDate(now));
                 var notes = body.OpeningNotes ?? body.Notes ?? "";
                 await q.Query("sales.restaurant_session").InsertAsync(new Dictionary<string, object?>
                 {
-                    ["session_id"] = id, ["session_no"] = no, ["branch_id"] = body.BranchId, ["register_id"] = register,
+                    ["session_id"] = id, ["session_no"] = no, ["branch_id"] = BranchKey(body.BranchId), ["register_id"] = register,
                     ["business_date"] = businessDate.ToDateTime(TimeOnly.MinValue), ["status"] = "open",
                     ["open_key"] = $"{body.BranchId}|{register}", ["opened_at_utc"] = now, ["opened_by"] = actor,
-                    ["opened_by_id"] = user.UserId, ["opening_balance_h"] = body.OpeningBalanceH, ["opening_notes"] = notes,
+                    ["opened_by_id"] = UserKey(user.UserId), ["opening_balance_h"] = body.OpeningBalanceH, ["opening_notes"] = notes,
                     ["last_order_no"] = 0, ["reopen_count"] = 0, ["created_at_utc"] = now, ["updated_at_utc"] = now,
                 }, tx);
-                await Audit(q, tx, id, "opened", $"Restaurant opened with SAR {body.OpeningBalanceH / 100m:0.00} float", null, body.OpeningBalanceH.ToString(), actor, now);
+                await Audit(q, tx, numbers, conn, id, "opened", $"Restaurant opened with SAR {body.OpeningBalanceH / 100m:0.00} float", null, body.OpeningBalanceH.ToString(), actor, now);
                 return SessionDoc(Row((await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx))));
             }, ct);
             return Results.Ok(doc);
@@ -181,7 +181,7 @@ public static class RestaurantSessionEndpoints
         }
     }
 
-    private static async Task<IResult> AddMovementAsync(string id, CashMovementRequest body, IDb db, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> AddMovementAsync(long id, CashMovementRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
     {
         if (!MovementTypes.Contains(body.Type))
             return Error(422, "bad_type", "Unknown cash movement type.", "نوع حركة نقدية غير معروف.");
@@ -198,13 +198,13 @@ public static class RestaurantSessionEndpoints
             var s = await q.Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(tx);
             if (s is null) return null;
             if ((string)((IDictionary<string, object?>)s)["status"]! != "open") return "closed";
-            var mid = $"rcm_{Guid.NewGuid():N}"[..20];
+            var mid = await numbers.NextAsync(conn, tx, "session_movement");
             await q.Query("sales.session_movement").InsertAsync(new Dictionary<string, object?>
             {
                 ["movement_id"] = mid, ["session_id"] = id, ["movement_type"] = body.Type, ["amount_h"] = body.AmountH,
                 ["description"] = body.Description.Trim(), ["user_name"] = actor, ["created_at_utc"] = now,
             }, tx);
-            await Audit(q, tx, id, "cash_movement", $"{body.Type}: SAR {body.AmountH / 100m:0.00} — {body.Description.Trim()}", null, body.AmountH.ToString(), actor, now);
+            await Audit(q, tx, numbers, conn, id, "cash_movement", $"{body.Type}: SAR {body.AmountH / 100m:0.00} — {body.Description.Trim()}", null, body.AmountH.ToString(), actor, now);
             return MovementDoc(Row(await q.Query("sales.session_movement").Where("movement_id", mid).FirstAsync(tx)));
         }, ct);
 
@@ -216,7 +216,7 @@ public static class RestaurantSessionEndpoints
         };
     }
 
-    private static async Task<IResult> CloseAsync(string id, CloseSessionRequest body, IDb db, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> CloseAsync(long id, CloseSessionRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
     {
         if (body.ActualClosingH < 0)
             return Error(422, "bad_count", "The counted cash cannot be negative.", "لا يمكن أن يكون النقد المعدود سالبًا.");
@@ -241,12 +241,12 @@ public static class RestaurantSessionEndpoints
             details["cashServer"] = cash;
             await q.Query("sales.restaurant_session").Where("session_id", id).UpdateAsync(new Dictionary<string, object?>
             {
-                ["status"] = "closed", ["open_key"] = id, ["closed_at_utc"] = now, ["closed_by"] = actor, ["closed_by_id"] = user.UserId,
+                ["status"] = "closed", ["open_key"] = $"closed:{id}", ["closed_at_utc"] = now, ["closed_by"] = actor, ["closed_by_id"] = UserKey(user.UserId),
                 ["expected_cash_h"] = expected, ["actual_closing_h"] = body.ActualClosingH, ["discrepancy_h"] = diff,
                 ["discrepancy_reason"] = body.DiscrepancyReason, ["closing_notes"] = body.ClosingNotes,
                 ["details_json"] = details.ToJsonString(), ["updated_at_utc"] = now,
             }, tx);
-            await Audit(q, tx, id, "closed",
+            await Audit(q, tx, numbers, conn, id, "closed",
                 $"Restaurant closed. Expected SAR {expected / 100m:0.00}, counted SAR {body.ActualClosingH / 100m:0.00}, difference SAR {diff / 100m:0.00}",
                 expected.ToString(), body.ActualClosingH.ToString(), actor, now);
             return SessionDoc(Row(await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx)));
@@ -266,7 +266,7 @@ public static class RestaurantSessionEndpoints
         };
     }
 
-    private static async Task<IResult> ReopenAsync(string id, ReopenRequest body, IDb db, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> ReopenAsync(long id, ReopenRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(body.Reason))
             return Error(422, "reason_required", "Say why the day is being reopened.", "اذكر سبب إعادة فتح اليوم.");
@@ -281,14 +281,14 @@ public static class RestaurantSessionEndpoints
                 if (raw is null) return null;
                 var s = Row(raw);
                 if ((string)s["status"]! == "open") return "open";
-                if (await OpenSession(q, (string)s["branch_id"]!, (string)s["register_id"]!, tx) is { } other)
+                if (await OpenSession(q, Convert.ToInt64(s["branch_id"]).ToString(), (string)s["register_id"]!, tx) is { } other)
                     throw new ConflictException(SessionDoc(other));
                 await q.Query("sales.restaurant_session").Where("session_id", id).UpdateAsync(new Dictionary<string, object?>
                 {
                     ["status"] = "open", ["open_key"] = $"{s["branch_id"]}|{s["register_id"]}", ["closed_at_utc"] = null,
                     ["reopen_count"] = Convert.ToInt32(s["reopen_count"]) + 1, ["updated_at_utc"] = now,
                 }, tx);
-                await Audit(q, tx, id, "reopened", $"Reopened: {body.Reason.Trim()}", "closed", "open", actor, now);
+                await Audit(q, tx, numbers, conn, id, "reopened", $"Reopened: {body.Reason.Trim()}", "closed", "open", actor, now);
                 return SessionDoc(Row(await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx)));
             }, ct);
             return outcome switch
@@ -309,7 +309,7 @@ public static class RestaurantSessionEndpoints
     internal static async Task<IDictionary<string, object?>?> OpenSession(QueryFactory q, string? branchId, string? registerId, DbTransaction? tx)
     {
         var x = q.Query("sales.restaurant_session").Where("status", "open");
-        if (!string.IsNullOrWhiteSpace(branchId)) x.Where("branch_id", branchId);
+        if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
         if (!string.IsNullOrWhiteSpace(registerId)) x.Where("register_id", registerId);
         object? row = await x.OrderByDesc("opened_at_utc").FirstOrDefaultAsync(tx);
         return row is null ? null : Row(row);
@@ -318,7 +318,7 @@ public static class RestaurantSessionEndpoints
     /// <summary>Opening + cash taken − change given + additions − expenses − withdrawals − transfers.</summary>
     private static async Task<JsonObject> CashBreakdown(QueryFactory q, IDictionary<string, object?> s, DbTransaction? tx, CancellationToken ct = default)
     {
-        var id = (string)s["session_id"]!;
+        var id = Convert.ToInt64(s["session_id"]);
         var cashSales = await q.Query("sales.sale_payment as p").Join("sales.sale as s", "s.sale_id", "p.sale_id")
             .Where("s.session_id", id).Where("s.status", "<>", "voided").Where("p.method", "cash")
             .SumAsync<long?>("p.amount_h", tx) ?? 0;
@@ -335,11 +335,11 @@ public static class RestaurantSessionEndpoints
         };
     }
 
-    private static Task Audit(QueryFactory q, DbTransaction tx, string sessionId, string action, string description,
-        string? oldValue, string? newValue, string user, DateTime at) =>
-        q.Query("sales.session_audit").InsertAsync(new Dictionary<string, object?>
+    private static async Task Audit(QueryFactory q, DbTransaction tx, INumberSeries numbers, DbConnection conn, long sessionId,
+        string action, string description, string? oldValue, string? newValue, string user, DateTime at) =>
+        await q.Query("sales.session_audit").InsertAsync(new Dictionary<string, object?>
         {
-            ["session_audit_id"] = $"rsa_{Guid.NewGuid():N}"[..20], ["session_id"] = sessionId, ["action"] = action,
+            ["session_audit_id"] = await numbers.NextAsync(conn, tx, "session_audit"), ["session_id"] = sessionId, ["action"] = action,
             ["description"] = description, ["old_value"] = oldValue, ["new_value"] = newValue, ["user_name"] = user, ["created_at_utc"] = at,
         }, tx);
 
@@ -352,6 +352,12 @@ public static class RestaurantSessionEndpoints
 
     internal static IDictionary<string, object?> Row(object row) => (IDictionary<string, object?>)row;
 
+    /// <summary>Branch ids are integers; the API carries them as text ("1").</summary>
+    internal static long BranchKey(string? value) => long.TryParse(value, out var id) ? id : 0;
+
+    /// <summary>The signed-in user's integer id, or null when it is not a number (should not happen).</summary>
+    internal static long? UserKey(string? value) => long.TryParse(value, out var id) ? id : null;
+
     private static string Iso(object? v) => v is DateTime d ? DateTime.SpecifyKind(d, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : "";
 
     internal static JsonObject SessionDoc(IDictionary<string, object?> r)
@@ -359,18 +365,18 @@ public static class RestaurantSessionEndpoints
         var details = CatalogEndpoints.Parse(r["details_json"]);
         var doc = new JsonObject
         {
-            ["id"] = (string)r["session_id"]!, ["number"] = Convert.ToInt64(r["session_no"]).ToString(),
-            ["branchId"] = (string)r["branch_id"]!, ["registerId"] = (string)r["register_id"]!,
+            ["id"] = Convert.ToInt64(r["session_id"]).ToString(), ["number"] = Convert.ToInt64(r["session_no"]).ToString(),
+            ["branchId"] = Convert.ToInt64(r["branch_id"]).ToString(), ["registerId"] = (string)r["register_id"]!,
             ["businessDate"] = r["business_date"] is DateTime bd ? bd.ToString("yyyy-MM-dd") : r["business_date"]?.ToString(),
             ["status"] = (string)r["status"]!, ["openedAt"] = Iso(r["opened_at_utc"]), ["openedBy"] = (string)r["opened_by"]!,
-            ["openedById"] = r["opened_by_id"] as string, ["openingBalanceH"] = Convert.ToInt64(r["opening_balance_h"]),
+            ["openedById"] = r["opened_by_id"] is null ? null : Convert.ToInt64(r["opened_by_id"]).ToString(), ["openingBalanceH"] = Convert.ToInt64(r["opening_balance_h"]),
             ["openingNotes"] = r["opening_notes"] as string ?? "", ["lastOrderNo"] = Convert.ToInt32(r["last_order_no"]),
             ["reopenCount"] = Convert.ToInt32(r["reopen_count"]),
             ["createdAt"] = Iso(r["created_at_utc"]), ["updatedAt"] = Iso(r["updated_at_utc"]),
         };
         if (r["closed_at_utc"] is DateTime) doc["closedAt"] = Iso(r["closed_at_utc"]);
         if (r["closed_by"] is string cb) doc["closedBy"] = cb;
-        if (r["closed_by_id"] is string cbi) doc["closedById"] = cbi;
+        if (r["closed_by_id"] is not null) doc["closedById"] = Convert.ToInt64(r["closed_by_id"]).ToString();
         if (r["expected_cash_h"] is not null) doc["expectedClosingH"] = Convert.ToInt64(r["expected_cash_h"]);
         if (r["actual_closing_h"] is not null) doc["actualClosingH"] = Convert.ToInt64(r["actual_closing_h"]);
         if (r["discrepancy_h"] is not null) doc["differenceH"] = Convert.ToInt64(r["discrepancy_h"]);
@@ -382,7 +388,7 @@ public static class RestaurantSessionEndpoints
 
     private static JsonObject MovementDoc(IDictionary<string, object?> r) => new()
     {
-        ["id"] = (string)r["movement_id"]!, ["sessionId"] = (string)r["session_id"]!, ["type"] = (string)r["movement_type"]!,
+        ["id"] = Convert.ToInt64(r["movement_id"]).ToString(), ["sessionId"] = Convert.ToInt64(r["session_id"]).ToString(), ["type"] = (string)r["movement_type"]!,
         ["amountH"] = Convert.ToInt64(r["amount_h"]), ["description"] = (string)r["description"]!,
         ["createdBy"] = (string)r["user_name"]!, ["createdAt"] = Iso(r["created_at_utc"]),
     };
@@ -391,7 +397,7 @@ public static class RestaurantSessionEndpoints
     {
         var doc = new JsonObject
         {
-            ["id"] = (string)r["session_audit_id"]!, ["sessionId"] = (string)r["session_id"]!, ["action"] = (string)r["action"]!,
+            ["id"] = Convert.ToInt64(r["session_audit_id"]).ToString(), ["sessionId"] = Convert.ToInt64(r["session_id"]).ToString(), ["action"] = (string)r["action"]!,
             ["description"] = (string)r["description"]!, ["userName"] = (string)r["user_name"]!, ["at"] = Iso(r["created_at_utc"]),
         };
         if (r["old_value"] is string o) doc["previousValue"] = o;

@@ -12,7 +12,8 @@
    - contain no `USE <database>` line (the deploy tool picks the database)
    - keep the previous API version working (add first; drop/rename only in a later release)
 5. Run before every push: `dotnet build src/PosApi/PosApi.csproj -c Release` and `python3 validate-api.py`.
-6. Business numbers are numeric (BIGINT/INT): invoice, daily order no., session no., credit note, receipt, employee no.
+6. Business numbers are numeric (BIGINT/INT): invoice (from 1), daily order no. (1 each business day), session no., credit note, receipt, employee no.
+   Primary keys are integers (branch 1, item 1, sale = invoice no.); text keys only for fixed codes (role, permission, series).
    Assigned only on the server, inside the transaction.
 7. Secrets never go in git: connection strings and JWT keys live in `appsettings.Production.json` on the server only.
 

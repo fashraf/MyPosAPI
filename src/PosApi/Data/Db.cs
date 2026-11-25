@@ -36,7 +36,8 @@ public sealed class Db : IDb
 
     public async Task<DbConnection> OpenAsync(CancellationToken ct)
     {
-        var connection = Provider.CreateConnection(_connectionString);
+        /* Timed: every statement a request runs is measured and listed on the API performance page. */
+        var connection = new Profiling.TimedConnection(Provider.CreateConnection(_connectionString));
         await connection.OpenAsync(ct);
         return connection;
     }

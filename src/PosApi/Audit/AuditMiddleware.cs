@@ -56,6 +56,8 @@ public sealed class AuditMiddleware
 
         var stopwatch = Stopwatch.StartNew();
         string? error = null;
+        var queries = new PosApi.Data.Profiling.RequestQueryLog();
+        PosApi.Data.Profiling.RequestQueryLog.Current = queries;
 
         try
         {
@@ -83,8 +85,9 @@ public sealed class AuditMiddleware
                 CurrentPage = NullIfEmpty(currentPage),
                 PreviousPage = NullIfEmpty(previousPage),
                 TotalMs = (int)stopwatch.ElapsedMilliseconds,
-                DatabaseMs = context.Items["DatabaseMs"] as int? ?? 0,
-                QueryCount = context.Items["QueryCount"] as int? ?? 0,
+                DatabaseMs = (int)Math.Round(queries.TotalMs),
+                QueryCount = queries.Entries.Count,
+                Queries = queries.Entries,
                 StatusCode = context.Response.StatusCode,
                 Succeeded = context.Response.StatusCode < 400 && error is null,
                 ErrorMessage = error

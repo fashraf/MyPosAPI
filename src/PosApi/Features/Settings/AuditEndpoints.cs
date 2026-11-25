@@ -28,6 +28,8 @@ public static class AuditEndpoints
         group.MapGet("/performance", PerformanceAsync).RequireAuthorization(PermissionPolicy.For("audit.performance"));
         group.MapGet("/performance/slow", SlowAsync).RequireAuthorization(PermissionPolicy.For("audit.performance"));
         group.MapGet("/performance/nplusone", NPlusOneAsync).RequireAuthorization(PermissionPolicy.For("audit.performance"));
+        group.MapGet("/performance/recent", RecentAsync).RequireAuthorization(PermissionPolicy.For("audit.performance"));
+        group.MapGet("/performance/request/{correlationId}", RequestAsync).RequireAuthorization(PermissionPolicy.For("audit.performance"));
     }
 
     private static readonly string[] EntryColumns =
@@ -88,7 +90,7 @@ public static class AuditEndpoints
 
         return Results.Ok(new PagedResult<object>
         {
-            Items = rows.Cast<object>().ToList(),
+            Items = rows.Select(r => (object)Utcify(r)).ToList(),
             Page = paging.Page,
             PageSize = paging.PageSize,
             TotalCount = total
@@ -142,7 +144,8 @@ public static class AuditEndpoints
             .Where("correlation_id", correlation)
             .FirstOrDefaultAsync(cancellationToken: ct);
 
-        return Results.Ok(new { entry, changes, tables, timing });
+        var queriesRun = correlation is null ? new List<IDictionary<string, object?>>() : await QueriesFor(q, correlation, ct);
+        return Results.Ok(new { entry = Utcify(entry), changes, tables, timing, queries = queriesRun });
     }
 
     /// <summary>The distinct values behind each filter, so the page can offer them.</summary>
@@ -184,6 +187,7 @@ public static class AuditEndpoints
             .SelectRaw("MAX(total_ms) AS \"MaxMs\"")
             .SelectRaw("AVG(database_ms) AS \"AvgDatabaseMs\"")
             .SelectRaw("SUM(CASE WHEN succeeded = ? THEN 1 ELSE 0 END) AS \"Failures\"", false)
+            .SelectRaw("MAX(occurred_at_utc) AS \"LastCalledAtUtc\"")
             .GroupBy("api_path", "http_method")
             .GetAsync(cancellationToken: ct)).ToList();
 
@@ -203,7 +207,8 @@ public static class AuditEndpoints
                     AvgDatabaseMs = (long)Math.Round(Convert.ToDouble(r["AvgDatabaseMs"] ?? 0)),
                     Failures = failures,
                     FailurePercent = calls == 0 ? 0 : Math.Round(100.0 * failures / calls, 1),
-                    Rating = Rate(avg)
+                    Rating = Rate(avg),
+                    LastCalledAtUtc = Utc(r["LastCalledAtUtc"])
                 };
             })
             .OrderByDescending(e => e.AvgMs)
@@ -256,11 +261,76 @@ public static class AuditEndpoints
             return r;
         }).ToList();
 
-        // Per-statement timing is not recorded on this layer yet; the list stays empty rather than inventing data.
-        return Results.Ok(new { requests, queries = Array.Empty<object>() });
+        var queries = (await db.Query(connection).Query("audit.query_timing")
+            .Select("correlation_id as CorrelationId", "seq as Seq", "command_text as CommandText",
+                    "parameter_names as ParameterNames", "duration_ms as DurationMs", "rows_affected as RowsAffected",
+                    "occurred_at_utc as OccurredAtUtc")
+            .OrderByDesc("duration_ms").Limit(take <= 0 ? 50 : Math.Min(take, 200))
+            .GetAsync(cancellationToken: ct)).Select(Utcify).ToList();
+        return Results.Ok(new { requests = requests.Select(r => Utcify(r)).ToList(), queries });
     }
 
-    /// <summary>Suspected N+1 patterns need per-statement timing, which this layer does not record yet.</summary>
-    private static Task<IResult> NPlusOneAsync(CancellationToken ct) =>
-        Task.FromResult(Results.Ok(Array.Empty<object>()));
+    /// <summary>The same statement run 5+ times in one request: usually a loop that should be one query.</summary>
+    private static async Task<IResult> NPlusOneAsync(IDb db, CancellationToken ct)
+    {
+        await using var connection = await db.OpenAsync(ct);
+        var rows = await db.Query(connection).Query("audit.query_timing as q")
+            .Join("audit.request_timing as r", "r.correlation_id", "q.correlation_id")
+            .Select("q.correlation_id as CorrelationId", "r.api_path as ApiPath", "r.http_method as HttpMethod", "q.command_text as Statement")
+            .SelectRaw("COUNT(*) AS \"Executions\"").SelectRaw("SUM(q.duration_ms) AS \"TotalMs\"")
+            .SelectRaw("MAX(r.occurred_at_utc) AS \"OccurredAtUtc\"")
+            .GroupBy("q.correlation_id", "r.api_path", "r.http_method", "q.command_text")
+            .HavingRaw("COUNT(*) >= 5")
+            .OrderByDesc("Executions").Limit(100)
+            .GetAsync(cancellationToken: ct);
+        return Results.Ok(rows.Select(Utcify));
+    }
+
+    /// <summary>The latest requests, newest first, for the "when did it run" list.</summary>
+    private static async Task<IResult> RecentAsync(IDb db, int take = 100, CancellationToken ct = default)
+    {
+        await using var connection = await db.OpenAsync(ct);
+        var rows = await db.Query(connection).Query("audit.request_timing")
+            .Select("correlation_id as CorrelationId", "username as Username", "api_path as ApiPath", "http_method as HttpMethod",
+                    "current_page as CurrentPage", "total_ms as TotalMs", "database_ms as DatabaseMs", "query_count as QueryCount",
+                    "status_code as StatusCode", "succeeded as Succeeded", "error_message as ErrorMessage", "occurred_at_utc as OccurredAtUtc")
+            .OrderByDesc("timing_id").Limit(Math.Clamp(take, 1, 500))
+            .GetAsync(cancellationToken: ct);
+        return Results.Ok(rows.Select(Utcify));
+    }
+
+    /// <summary>One request: its timing and every statement it ran, in order.</summary>
+    private static async Task<IResult> RequestAsync(string correlationId, IDb db, CancellationToken ct)
+    {
+        await using var connection = await db.OpenAsync(ct);
+        var q = db.Query(connection);
+        var request = await q.Query("audit.request_timing")
+            .Select("correlation_id as CorrelationId", "username as Username", "api_path as ApiPath", "http_method as HttpMethod",
+                    "current_page as CurrentPage", "previous_page as PreviousPage", "total_ms as TotalMs", "database_ms as DatabaseMs",
+                    "query_count as QueryCount", "status_code as StatusCode", "succeeded as Succeeded", "error_message as ErrorMessage",
+                    "occurred_at_utc as OccurredAtUtc")
+            .Where("correlation_id", correlationId).FirstOrDefaultAsync(cancellationToken: ct);
+        if (request is null) return Results.NotFound();
+        var queries = await QueriesFor(q, correlationId, ct);
+        return Results.Ok(new { request = Utcify(request), queries });
+    }
+
+    private static async Task<List<IDictionary<string, object?>>> QueriesFor(QueryFactory q, string correlationId, CancellationToken ct) =>
+        (await q.Query("audit.query_timing")
+            .Select("seq as Seq", "command_text as CommandText", "parameter_names as ParameterNames",
+                    "duration_ms as DurationMs", "rows_affected as RowsAffected", "occurred_at_utc as OccurredAtUtc")
+            .Where("correlation_id", correlationId).OrderBy("seq")
+            .GetAsync(cancellationToken: ct)).Select(Utcify).ToList();
+
+    /// <summary>Dates as UTC ISO strings with a Z, so the browser can say "2 seconds ago" correctly.</summary>
+    private static string? Utc(object? value) =>
+        value is DateTime d ? DateTime.SpecifyKind(d, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : value?.ToString();
+
+    private static IDictionary<string, object?> Utcify(object row)
+    {
+        var d = (IDictionary<string, object?>)row;
+        foreach (var key in d.Keys.ToList())
+            if (d[key] is DateTime) d[key] = Utc(d[key]);
+        return d;
+    }
 }
