@@ -59,16 +59,17 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth")
-            .WithTags("Auth")
-            .RequireRateLimiting("auth");
+        var group = app.MapGroup("/api/auth").WithTags("Auth");
 
-        group.MapPost("/register", RegisterAsync);
-        group.MapPost("/login", RequestOtpAsync);
-        group.MapPost("/verify", VerifyOtpAsync);
-        group.MapPost("/refresh", RefreshAsync);
-        group.MapPost("/logout", LogoutAsync).RequireAuthorization();
-        group.MapGet("/me", MeAsync).RequireAuthorization();
+        /* The strict limit is for what an attacker would hammer: creating accounts, asking for codes, guessing codes.
+           Staying signed in (who am I, refresh, sign out) runs on every page load of every till, so it uses the
+           normal per-user limit; under the strict one a reload burst signed people out (429 on /me). */
+        group.MapPost("/register", RegisterAsync).RequireRateLimiting("auth");
+        group.MapPost("/login", RequestOtpAsync).RequireRateLimiting("auth");
+        group.MapPost("/verify", VerifyOtpAsync).RequireRateLimiting("auth");
+        group.MapPost("/refresh", RefreshAsync).RequireRateLimiting("standard");
+        group.MapPost("/logout", LogoutAsync).RequireAuthorization().RequireRateLimiting("standard");
+        group.MapGet("/me", MeAsync).RequireAuthorization().RequireRateLimiting("standard");
     }
 
     /// <summary>

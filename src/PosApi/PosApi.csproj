@@ -34,4 +34,8 @@
   <ItemGroup>
     <ProjectReference Include="../../Shared/Nazad.Shared/Nazad.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Setup data loaded by the seed command (see Data/Seeding/TenantSeeder.cs) -->
+    <None Include="seed\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

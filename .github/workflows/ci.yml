@@ -35,7 +35,7 @@ jobs:
         with: { dotnet-version: 8.0.x }
       - run: dotnet publish src/PosApi/PosApi.csproj -c Release -o out
       - name: Migrations apply, and are safe to run again
-        run: cd out && dotnet PosApi.dll --migrate && dotnet PosApi.dll --migrate
+        run: cd out && dotnet PosApi.dll --migrate && dotnet PosApi.dll --migrate && dotnet PosApi.dll --seed seed/tenant-alnoor.json && dotnet PosApi.dll --seed seed/tenant-alnoor.json
       - name: API starts and reaches PostgreSQL
         run: |
           cd out
