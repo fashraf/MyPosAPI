@@ -80,6 +80,10 @@ public static class CatalogEndpoints
         if (body["priceH"] is not JsonValue p || !p.TryGetValue<double>(out var price) || price < 0)
             return Results.Json(ApiError.Create("bad_price", "The price must be zero or more.", "يجب أن يكون السعر صفرًا أو أكثر."), statusCode: 422);
 
+        /* Stock moves through sales and stock adjustments only: an edit to the name or price must not overwrite a
+           quantity a sale changed a moment ago. An adjustment says so with setStock. */
+        var setStock = body["setStock"] is JsonValue ss && ss.TryGetValue<bool>(out var flag) && flag;
+        body.Remove("setStock");
         var now = DateTime.UtcNow;
         var row = CatalogRow.From(body, now);
         await db.InTransactionAsync(async (conn, tx) =>
@@ -89,6 +93,7 @@ public static class CatalogEndpoints
             if (exists)
             {
                 row.Remove("item_id"); row.Remove("created_at_utc");
+                if (!setStock) row.Remove("stock_quantity");
                 await q.Query("core.catalog_item").Where("item_id", id).UpdateAsync(row, tx);
             }
             else await q.Query("core.catalog_item").InsertAsync(row, tx);

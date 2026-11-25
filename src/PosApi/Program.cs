@@ -254,6 +254,16 @@ try
      * edge, per-challenge attempt counting is not enough — an attacker simply
      * requests fresh challenges. This caps the whole flow per caller.
      */
+    /* Behind IIS/nginx every request arrives from 127.0.0.1. Read the visitor's address from X-Forwarded-For (sent by
+       the local reverse proxy only: loopback is the default trusted proxy), so rate limits, the audit trail and
+       login attempts see real addresses instead of one shared one. */
+    builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                           | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+        o.ForwardLimit = 1;
+    });
+
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -369,6 +379,7 @@ try
     });
 
     var app = builder.Build();
+    app.UseForwardedHeaders();   // first: everything after it sees the real client address
 
     /*------------------------------------------------------------- pipeline */
 
