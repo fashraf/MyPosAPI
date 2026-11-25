@@ -18,7 +18,7 @@ public sealed class NumberSeries(IDb db) : INumberSeries
     /// <summary>First number handed out = start + 1 (invoice 100001, credit note 500001, receipt 700001).</summary>
     public static readonly IReadOnlyDictionary<string, long> Starts = new Dictionary<string, long>
     {
-        ["invoice"] = 100000, ["credit_note"] = 500000, ["receipt"] = 700000, ["session"] = 0, ["employee"] = 1000, ["branch"] = 99,
+        ["invoice"] = 100000, ["credit_note"] = 500000, ["receipt"] = 700000, ["session"] = 1000, ["employee"] = 1000, ["branch"] = 99,
     };
 
     public async Task<long> NextAsync(DbConnection connection, DbTransaction tx, string key, string scope = "*")

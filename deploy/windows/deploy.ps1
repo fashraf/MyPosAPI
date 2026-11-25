@@ -34,6 +34,12 @@ if ($App -eq 'web') {
   Push-Location $rel
   & dotnet .\PosApi.dll --migrate
   $code = $LASTEXITCODE
+  # Setup data (branches, users, roles, items, combos). Only adds what is missing; never touches activity.
+  # Staging always; production only when "seedOnEmpty": true is set in config\mypos.json.
+  if ($code -eq 0 -and ($c.environment -eq 'staging' -or $c.seedOnEmpty) -and (Test-Path .\seed\tenant-alnoor.json)) {
+    & dotnet .\PosApi.dll --seed .\seed\tenant-alnoor.json
+    $code = $LASTEXITCODE
+  }
   Pop-Location
   Remove-Item Env:\ConnectionStrings__PosMain
   if ($code -ne 0) {

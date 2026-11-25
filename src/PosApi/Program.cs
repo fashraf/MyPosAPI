@@ -55,6 +55,19 @@ try
     if (args.Contains("--migrate"))
         return PosApi.Data.Migrations.SchemaMigrator.Run(builder.Configuration);
 
+    // "dotnet PosApi.dll --seed seed/tenant-alnoor.json": add missing setup data (branches, users, roles, catalog). Never
+    // overwrites anything and never creates activity. Run after --migrate.
+    if (Array.IndexOf(args, "--seed") is var seedAt and >= 0 && seedAt + 1 < args.Length)
+    {
+        var seedServices = new ServiceCollection();
+        seedServices.AddSingleton<IConfiguration>(builder.Configuration);
+        seedServices.AddDatabase(builder.Configuration);
+#pragma warning disable ASP0000 // a one-off command run, not the web host
+        await using var seedProvider = seedServices.BuildServiceProvider();
+#pragma warning restore ASP0000
+        return await PosApi.Data.Seeding.TenantSeeder.RunAsync(seedProvider.GetRequiredService<PosApi.Data.IDb>(), args[seedAt + 1], Console.Out);
+    }
+
     /*
      * Read Serilog's settings from configuration, but always keep a console
      * sink whatever that configuration says.
@@ -473,7 +486,7 @@ try
 
     app.MapAuthEndpoints();
     app.MapCatalogEndpoints();
-    app.MapCatalogWriteEndpoints();
+
     app.MapSalesEndpoints();
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
