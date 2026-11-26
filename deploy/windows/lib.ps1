@@ -125,6 +125,9 @@ function Write-ApiConfig($c, [string]$Folder, [string]$Tag) {
     Auth__UseFixedDevOtp = $(if ($c.environment -eq 'staging') { 'true' } else { 'false' })
     # Staging: the QA suite signs in many times from one address.
     RateLimiting__AuthPermitLimit = $(if ($c.environment -eq 'staging') { '60' } else { '10' })
+    # Order light (ESP32): device key and poll interval, from config\mypos.json ("orderLightKey", "orderLightPollSeconds").
+    OrderLight__Key = $(if ($c.PSObject.Properties['orderLightKey']) { $c.orderLightKey } else { '' })
+    OrderLight__PollSeconds = $(if ($c.PSObject.Properties['orderLightPollSeconds']) { "$($c.orderLightPollSeconds)" } else { '10' })
   }
   $envXml = ($vars.GetEnumerator() | ForEach-Object { "        <environmentVariable name=`"$($_.Key)`" value=`"$([Security.SecurityElement]::Escape([string]$_.Value))`" />" }) -join "`n"
   @"
