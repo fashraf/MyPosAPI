@@ -27,11 +27,28 @@ public sealed class OrderFeed
 
     public long LastSeq { get { lock (_gate) return _seq; } }
 
+    /// <summary>Bumped by "Test the light" in the back office; boards blink blue-green when it changes.</summary>
+    public int TestId { get; private set; }
+    public void Test() { lock (_gate) TestId++; }
+
+    private bool _seeded;
+    /// <summary>
+    /// The cursor is the invoice number, so a board keeps its place across API restarts and deploys. On the first
+    /// poll after a start the feed reads the latest invoice number once (one query per process, never per poll).
+    /// </summary>
+    public async Task EnsureSeededAsync(Func<Task<long>> latestInvoice)
+    {
+        if (_seeded) return;
+        var latest = await latestInvoice();
+        lock (_gate) { if (!_seeded) { _seq = Math.Max(_seq, latest); _seeded = true; } }
+    }
+
     public void Publish(long invoiceNo, int orderNo, long totalH, string branchId, string? orderType)
     {
         lock (_gate)
         {
-            _events.AddLast(new OrderEvent(++_seq, invoiceNo, orderNo, totalH, branchId, orderType ?? "", DateTime.UtcNow));
+            _seq = Math.Max(_seq, invoiceNo);
+            _events.AddLast(new OrderEvent(invoiceNo, invoiceNo, orderNo, totalH, branchId, orderType ?? "", DateTime.UtcNow));
             while (_events.Count > Keep) _events.RemoveFirst();
         }
     }
@@ -54,7 +71,7 @@ public static class OrderLightEndpoints
     public static void MapOrderLightEndpoints(this IEndpointRouteBuilder app)
     {
         /* No user sign-in: a board has no person behind it. It sends the device key in X-Device-Key instead. */
-        app.MapGet(Path, (HttpContext http, OrderFeed feed, IConfiguration config, long? since, string? bootId) =>
+        app.MapGet(Path, async (HttpContext http, OrderFeed feed, IConfiguration config, PosApi.Data.IDb db, long? since, string? bootId, CancellationToken ct) =>
         {
             var key = config["OrderLight:Key"];
             if (string.IsNullOrWhiteSpace(key))
@@ -65,17 +82,25 @@ public static class OrderLightEndpoints
                 return Results.Json(new { code = "bad_key", messageEn = "Wrong or missing device key." }, statusCode: 401);
 
             var poll = Math.Clamp(config.GetValue("OrderLight:PollSeconds", 10), 2, 3600);
+            await feed.EnsureSeededAsync(async () =>
+            {
+                await using var conn = await db.OpenAsync(ct);
+                var max = await SqlKata.Execution.QueryExtensions.MaxAsync<long?>(db.Query(conn).Query("sales.sale"), "invoice_no", cancellationToken: ct);
+                return max ?? 0;
+            });
             var (last, _) = feed.Since(long.MaxValue);
 
-            /* First call, a server restart (new bootId) or a position ahead of the server: take the current position
-               without reporting old orders, so the board does not blink for orders it never missed. */
-            if (since is null || bootId != feed.BootId || since > last)
-                return Results.Ok(new { bootId = feed.BootId, lastSeq = last, pollSeconds = poll, newOrders = 0, orders = Array.Empty<object>() });
+            /* First call, or a position ahead of the server (database restored): take the current position without
+               blinking. The cursor is the invoice number, so a restart or deploy no longer loses orders. */
+            if (since is null || since > last)
+                return Results.Ok(new { bootId = feed.BootId, testId = feed.TestId, lastSeq = last, pollSeconds = poll, newOrders = 0, orders = Array.Empty<object>() });
 
             var (lastSeq, orders) = feed.Since(since.Value);
+            /* Invoices are 1, 2, 3 without gaps, so orders placed while the feed was restarting still count. */
+            var count = (int)Math.Min(lastSeq - since.Value, 50);
             return Results.Ok(new
             {
-                bootId = feed.BootId, lastSeq, pollSeconds = poll, newOrders = orders.Count,
+                bootId = feed.BootId, testId = feed.TestId, lastSeq, pollSeconds = poll, newOrders = count,
                 orders = orders.Select(o => new
                 {
                     o.Seq, invoice = o.InvoiceNo, orderNo = o.OrderNo, totalSar = o.TotalH / 100m, o.BranchId, o.OrderType, o.AtUtc,
@@ -85,5 +110,20 @@ public static class OrderLightEndpoints
         .AllowAnonymous()
         .RequireRateLimiting("standard")
         .WithTags("Order light");
+
+        /* Back office "Test the light": makes every board blink without placing an order. */
+        app.MapPost(Path + "/test", (OrderFeed feed) => { feed.Test(); return Results.Ok(new { testId = feed.TestId }); })
+            .RequireAuthorization().RequireRateLimiting("standard").WithTags("Order light");
+
+        /* Same test with the device key, for a quick check from PowerShell/curl without signing in. */
+        app.MapPost(Path + "/ping", (HttpContext http, OrderFeed feed, IConfiguration config) =>
+        {
+            var key = config["OrderLight:Key"];
+            var sent = http.Request.Headers["X-Device-Key"].ToString();
+            if (string.IsNullOrWhiteSpace(key) || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(sent), Encoding.UTF8.GetBytes(key)))
+                return Results.Json(new { code = "bad_key", messageEn = "Wrong or missing device key." }, statusCode: 401);
+            feed.Test();
+            return Results.Ok(new { testId = feed.TestId });
+        }).AllowAnonymous().RequireRateLimiting("standard").WithTags("Order light");
     }
 }

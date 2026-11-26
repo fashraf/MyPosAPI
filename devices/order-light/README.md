@@ -42,3 +42,24 @@ The LED pin is GPIO 48 on DevKitC-1 v1.0 and GPIO 38 on v1.1. If nothing lights,
 ```bash
 curl -H "X-Device-Key: YOUR-KEY" http://144.91.103.111:8080/api/device/order-feed
 ```
+
+
+## It does not blink — check in this order
+
+1. **Power on.** The LED must show red, green, blue and beep once. No colours → change `LED_PIN` to `38` and upload again.
+2. **Serial monitor (115200).** It tells you exactly what is wrong:
+   - `Wi-Fi: connecting ... failed` → Wi-Fi name/password (the ESP32 only sees **2.4 GHz** Wi-Fi).
+   - `API answered 503` → the server has no key: add `orderLightKey` to `C:\mypos\config\mypos.json`, then re-run the API deploy (the key is applied at deploy).
+   - `API answered 401` → `DEVICE_KEY` in the sketch differs from `orderLightKey` on the server.
+   - `API answered -1` → board cannot reach `144.91.103.111:8080` (firewall, or wrong `API_BASE`).
+   - `Synced: last invoice N` → all good; place an order and it blinks within `pollSeconds`.
+3. **Test without placing an order** (PowerShell, any PC):
+   ```powershell
+   Invoke-RestMethod -Method Post -Uri http://144.91.103.111:8080/api/device/order-feed/ping -Headers @{ "X-Device-Key" = "YOUR-KEY" }
+   ```
+   The board blinks cyan 3 times (and beeps) at its next check.
+
+## Sound
+
+The DevKitC has no speaker. Buy an **active buzzer module** (e.g. KY-012, 3.3–5 V). Wire **+ / S → GPIO 4**, **– → GND**.
+Change `BUZZER_PIN` if you use another pin; set it to `-1` for no sound.

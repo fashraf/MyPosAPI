@@ -4,11 +4,16 @@
  * Blinks the on-board RGB LED green every time a new order is placed.
  * It polls the API's in-memory order feed (GET /api/device/order-feed); the feed never queries the database.
  *
+ * Power-on self-test: red, green, blue, then a short beep. If you see no colours, LED_PIN is wrong (try 38).
+ *
  * LED colours
- *   green blink x2  a new order (one burst per order, up to 5 in a row)
+ *   green blink x2  a new order (one burst per order, up to 5 in a row) + beep
+ *   cyan blink x3   "Test the light" pressed in the back office (or the /ping test)
  *   dim blue        connecting to Wi-Fi
  *   off             idle, all good
  *   red flash       could not reach the API (wrong key, server down, no internet); it keeps retrying
+ *
+ * Sound: the board has no speaker. Wire an ACTIVE buzzer (3.3-5 V, e.g. "KY-012") between BUZZER_PIN and GND.
  *
  * Setup (Arduino IDE 2.x):
  *   1. Boards Manager: install "esp32" by Espressif (2.0.x or 3.x). Board: "ESP32S3 Dev Module".
@@ -17,6 +22,7 @@
  *   4. Tools > Serial Monitor at 115200 to watch what it does.
  */
 
+#include <Arduino.h>   // needed when this file is used as PlatformIO src/main.cpp
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -36,10 +42,14 @@ const bool USE_SERVER_POLL_SECONDS = true;
 /* On-board RGB LED: GPIO 48 on DevKitC-1 v1.0, GPIO 38 on v1.1 (printed on the board's back). */
 const uint8_t LED_PIN     = 48;
 const uint8_t BRIGHTNESS  = 60;   // 0-255; the LED is very bright at 255
+
+/* Buzzer: + leg to this pin, - leg to GND. Set to -1 if you have no buzzer. */
+const int     BUZZER_PIN  = 4;
 /* ===================================================================== */
 
+long    lastSeq = -1;     // last invoice number seen; -1: not synced yet (first answer only sets the position, no blink)
 String  bootId = "";
-long    lastSeq = -1;     // -1: not synced yet (first answer only sets the position, no blink)
+int     testId = -1;
 
 void led(uint8_t r, uint8_t g, uint8_t b) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -54,6 +64,24 @@ void blinkGreen(int times) {
     led(0, BRIGHTNESS, 0); delay(180);
     led(0, 0, 0);          delay(180);
   }
+}
+
+void beep(int ms) {
+  if (BUZZER_PIN < 0) return;
+  digitalWrite(BUZZER_PIN, HIGH); delay(ms); digitalWrite(BUZZER_PIN, LOW);
+}
+
+void newOrderSignal() { beep(120); blinkGreen(2); }
+
+void testSignal() {
+  for (int i = 0; i < 3; i++) { led(0, BRIGHTNESS, BRIGHTNESS); beep(60); delay(140); led(0, 0, 0); delay(180); }
+}
+
+void selfTest() {
+  led(BRIGHTNESS, 0, 0); delay(400);
+  led(0, BRIGHTNESS, 0); delay(400);
+  led(0, 0, BRIGHTNESS); delay(400);
+  led(0, 0, 0); beep(80);
 }
 
 void flashRed() { led(BRIGHTNESS, 0, 0); delay(150); led(0, 0, 0); }
@@ -78,7 +106,7 @@ void connectWifi() {
 
 void poll() {
   String url = String(API_BASE) + "/api/device/order-feed";
-  if (lastSeq >= 0) url += "?since=" + String(lastSeq) + "&bootId=" + bootId;
+  if (lastSeq >= 0) url += "?since=" + String(lastSeq);
 
   HTTPClient http;
   http.setTimeout(8000);
@@ -103,14 +131,19 @@ void poll() {
   int    newOrders  = doc["newOrders"] | 0;
   if (USE_SERVER_POLL_SECONDS && doc["pollSeconds"].is<int>()) pollSeconds = doc["pollSeconds"].as<int>();
 
-  if (lastSeq < 0 || serverBoot != bootId) {
-    Serial.printf("Synced: position %ld (server start %s)\n", serverSeq, serverBoot.c_str());
+  int serverTest = doc["testId"] | 0;
+  /* Test blink: only when the same server run reports a new test number (not on first contact or after a restart). */
+  if (testId >= 0 && serverBoot == bootId && serverTest != testId) { Serial.println("Test signal"); testSignal(); }
+  testId = serverTest;
+
+  if (lastSeq < 0) {
+    Serial.printf("Synced: last invoice %ld\n", serverSeq);
   } else if (newOrders > 0) {
     for (JsonObject o : doc["orders"].as<JsonArray>()) {
       Serial.printf("New order #%d  invoice %ld  SAR %.2f  (%s)\n",
                     (int)o["orderNo"], (long)o["invoice"], (double)o["totalSar"], (const char*)(o["orderType"] | ""));
     }
-    for (int i = 0; i < min(newOrders, 5); i++) { blinkGreen(2); delay(250); }
+    for (int i = 0; i < min(newOrders, 5); i++) { newOrderSignal(); delay(250); }
   }
   bootId  = serverBoot;
   lastSeq = serverSeq;
@@ -119,8 +152,9 @@ void poll() {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  led(0, 0, 0);
-  Serial.println("\nMyPOS order light");
+  if (BUZZER_PIN >= 0) { pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW); }
+  Serial.println("\nMyPOS order light: self-test (red, green, blue, beep)");
+  selfTest();
   connectWifi();
 }
 
