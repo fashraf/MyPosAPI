@@ -44,6 +44,10 @@ public sealed class AuthOptions
     public bool UseFixedDevOtp { get; init; }
 
     public string FixedDevOtp { get; init; } = "1234";
+
+    /// <summary>"Remember me": how long a remembered session lasts without use. Every refresh renews it, so a device
+    /// in daily use stays signed in until the person signs out.</summary>
+    public int RememberMeDays { get; init; } = 180;
 }
 
 public sealed class JwtOptions

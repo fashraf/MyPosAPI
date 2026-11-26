@@ -504,6 +504,8 @@ try
 
     app.MapSalesEndpoints();
     PosApi.Features.OrderLight.OrderLightEndpoints.MapOrderLightEndpoints(app);
+    PosApi.Features.Kitchen.KitchenTicketEndpoints.MapKitchenTicketEndpoints(app);
+    PosApi.Features.Store.TenantStoreEndpoints.MapTenantStoreEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
