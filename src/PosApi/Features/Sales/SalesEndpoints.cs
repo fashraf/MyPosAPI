@@ -32,7 +32,7 @@ public static class SalesEndpoints
 
     public sealed record CommitRequest(JsonObject Sale, string? IdempotencyKey, List<StockMove>? StockMovements);
     public sealed record StockMove(string ItemId, decimal Quantity);
-    public sealed record VoidRequest(string Reason, string? Code, string? VoidedBy);
+    public sealed record VoidRequest(string Reason, string? Code, string? VoidedBy, string? ReplacedByInvoice = null);
 
     private static async Task<IResult> CommitAsync(CommitRequest body, IDb db, INumberSeries numbers, ICurrentUser user, PosApi.Features.OrderLight.OrderFeed feed, CancellationToken ct)
     {
@@ -238,6 +238,8 @@ public static class SalesEndpoints
                 var document = CatalogEndpoints.Parse(row["document_json"]) ?? new JsonObject();
                 document["status"] = "voided"; document["voidReason"] = body.Reason; document["cancelReasonCode"] = body.Code;
                 document["voidedBy"] = actor; document["voidedAt"] = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                /* An edit cancels the old invoice and names the new one, so every device shows "Edited → #n". */
+                if (!string.IsNullOrWhiteSpace(body.ReplacedByInvoice)) document["replacedByInvoice"] = body.ReplacedByInvoice;
                 await q.Query("sales.sale").Where("sale_id", saleId).UpdateAsync(new Dictionary<string, object?>
                 {
                     ["status"] = "voided", ["void_reason"] = body.Reason, ["voided_at_utc"] = now, ["voided_by"] = actor,
