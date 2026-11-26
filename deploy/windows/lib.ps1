@@ -79,13 +79,29 @@ function Remove-OldReleases($c, [string]$App) {
 
 # web.config for the site: SPA fallback + /api, /health, /cloudprnt forwarded to this environment's API.
 function Write-WebConfig($c, [string]$Folder) {
+  # "httpsHost" in config\mypos.json (set by setup-https.ps1): http://<that host> is sent to https://. The IP address
+  # (ESP32 order light, health checks) and the certificate check (/.well-known) keep working over http.
+  $https = ''
+  if ($c.PSObject.Properties.Name -contains 'httpsHost' -and $c.httpsHost) {
+    $https = @"
+        <rule name="https" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{HTTPS}" pattern="^OFF$" />
+            <add input="{HTTP_HOST}" pattern="^$([regex]::Escape($c.httpsHost))$" />
+            <add input="{REQUEST_URI}" pattern="^/\.well-known/" negate="true" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
+        </rule>
+"@
+  }
   @"
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <system.webServer>
     <rewrite>
       <rules>
-        <rule name="api" stopProcessing="true">
+$https        <rule name="api" stopProcessing="true">
           <match url="^(api|health|cloudprnt)(/.*)?$" />
           <action type="Rewrite" url="http://127.0.0.1:$($c.apiPort)/{R:0}" />
         </rule>
