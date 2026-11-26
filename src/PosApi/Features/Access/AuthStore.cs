@@ -37,9 +37,10 @@ public interface IAuthStore
     Task<IReadOnlyList<string>> PermissionsAsync(DbConnection c, string userId, CancellationToken ct);
     Task<IReadOnlyList<string>> BranchesAsync(DbConnection c, string userId, CancellationToken ct);
     Task<string?> ChallengeIdentifierAsync(DbConnection c, string challengeId, CancellationToken ct);
-    Task SaveSessionAsync(DbConnection c, string userId, string tokenHash, DateTime expiresAtUtc, CancellationToken ct);
+    Task SaveSessionAsync(DbConnection c, string userId, string tokenHash, DateTime expiresAtUtc, CancellationToken ct, bool remember = false);
+    Task<bool> IsRememberedAsync(DbConnection c, string tokenHash, CancellationToken ct);
     Task<string?> ActiveRefreshTokenUserAsync(DbConnection c, string tokenHash, CancellationToken ct);
-    Task RotateRefreshTokenAsync(DbConnection c, string oldHash, string newHash, string userId, DateTime expiresAtUtc, CancellationToken ct);
+    Task RotateRefreshTokenAsync(DbConnection c, string oldHash, string newHash, string userId, DateTime expiresAtUtc, CancellationToken ct, bool remember = false);
     Task RevokeRefreshTokenAsync(DbConnection c, string tokenHash, CancellationToken ct);
     Task<(RegistrationError Error, string? UserId, string? BranchId)> RegisterBusinessAsync(RegistrationInput input, CancellationToken ct);
 }
@@ -79,12 +80,16 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
         c.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             "SELECT identifier FROM core.otp_challenge WHERE challenge_id = @ChallengeId", new { ChallengeId = challengeId }, cancellationToken: ct));
 
-    public async Task SaveSessionAsync(DbConnection c, string userId, string tokenHash, DateTime expiresAtUtc, CancellationToken ct)
+    public Task<bool> IsRememberedAsync(DbConnection c, string tokenHash, CancellationToken ct) =>
+        c.QuerySingleOrDefaultAsync<bool>(new CommandDefinition(
+            "SELECT remember_me FROM core.refresh_token WHERE token_hash = @Hash", new { Hash = tokenHash }, cancellationToken: ct));
+
+    public async Task SaveSessionAsync(DbConnection c, string userId, string tokenHash, DateTime expiresAtUtc, CancellationToken ct, bool remember = false)
     {
         await using var tx = await c.BeginTransactionAsync(ct);
         await c.ExecuteAsync(new CommandDefinition(
-            "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc) VALUES (@Hash, @UserId, @Now, @Expires)",
-            new { Hash = tokenHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
+            "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc, remember_me) VALUES (@Hash, @UserId, @Now, @Expires, @Remember)",
+            new { Hash = tokenHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc, Remember = remember }, tx, cancellationToken: ct));
         await c.ExecuteAsync(new CommandDefinition(
             "UPDATE core.app_user SET last_login_at_utc = @Now WHERE user_id = @UserId",
             new { Now = DateTime.UtcNow, UserId = Id(userId) }, tx, cancellationToken: ct));
@@ -96,15 +101,15 @@ public sealed class AuthStore(IDb db, INumberSeries numbers) : IAuthStore
             "SELECT CAST(user_id AS VARCHAR(20)) FROM core.refresh_token WHERE token_hash = @Hash AND revoked_at_utc IS NULL AND expires_at_utc > @Now",
             new { Hash = tokenHash, Now = DateTime.UtcNow }, cancellationToken: ct));
 
-    public async Task RotateRefreshTokenAsync(DbConnection c, string oldHash, string newHash, string userId, DateTime expiresAtUtc, CancellationToken ct)
+    public async Task RotateRefreshTokenAsync(DbConnection c, string oldHash, string newHash, string userId, DateTime expiresAtUtc, CancellationToken ct, bool remember = false)
     {
         await using var tx = await c.BeginTransactionAsync(ct);
         await c.ExecuteAsync(new CommandDefinition(
             "UPDATE core.refresh_token SET revoked_at_utc = @Now WHERE token_hash = @OldHash",
             new { Now = DateTime.UtcNow, OldHash = oldHash }, tx, cancellationToken: ct));
         await c.ExecuteAsync(new CommandDefinition(
-            "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc) VALUES (@Hash, @UserId, @Now, @Expires)",
-            new { Hash = newHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc }, tx, cancellationToken: ct));
+            "INSERT INTO core.refresh_token (token_hash, user_id, issued_at_utc, expires_at_utc, remember_me) VALUES (@Hash, @UserId, @Now, @Expires, @Remember)",
+            new { Hash = newHash, UserId = Id(userId), Now = DateTime.UtcNow, Expires = expiresAtUtc, Remember = remember }, tx, cancellationToken: ct));
         await tx.CommitAsync(ct);
     }
 

@@ -8,7 +8,7 @@ using PosApi.Data;
 
 namespace PosApi.Features.Access;
 
-public sealed record LoginRequest(string Identifier, string? Password);
+public sealed record LoginRequest(string Identifier, string? Password, bool? RememberMe = null);
 
 public sealed record RegistrationOwner(
     string FirstName,
@@ -37,7 +37,7 @@ public sealed record RegisterRequest(
     RegistrationOwner Owner,
     RegistrationBusiness Business,
     RegistrationTax Tax);
-public sealed record OtpRequest(string ChallengeId, string Code);
+public sealed record OtpRequest(string ChallengeId, string Code, bool? RememberMe = null);
 public sealed record RefreshRequest(string RefreshToken);
 
 public sealed record SessionResponse(
@@ -297,6 +297,7 @@ public static class AuthEndpoints
         IOtpService otp,
         IJwtTokenService tokens,
         LicenseGuard licenseGuard,
+        IOptions<AuthOptions> authOptions,
         CancellationToken ct)
     {
         var result = await otp.VerifyAsync(request.ChallengeId, request.Code, ct);
@@ -360,7 +361,8 @@ public static class AuthEndpoints
                 reason ?? "Access denied.", reason ?? "تم رفض الوصول."), statusCode: 403);
         }
 
-        return Results.Ok(await IssueSessionAsync(store, connection, tokens, user, permissions, branches, ct));
+        return Results.Ok(await IssueSessionAsync(store, connection, tokens, user, permissions, branches, ct,
+            request.RememberMe == true, authOptions.Value.RememberMeDays));
     }
 
     /// <summary>
@@ -376,11 +378,14 @@ public static class AuthEndpoints
         AuthUser user,
         IReadOnlyList<string> permissions,
         IReadOnlyList<string> branches,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool remember = false,
+        int rememberDays = 180)
     {
         var pair = tokens.Issue(user.UserId, user.Username, user.RoleId, permissions, branches);
+        var expires = remember ? DateTime.UtcNow.AddDays(rememberDays) : pair.RefreshExpiresAtUtc;
 
-        await store.SaveSessionAsync(connection, user.UserId, tokens.HashRefreshToken(pair.RefreshToken), pair.RefreshExpiresAtUtc, ct);
+        await store.SaveSessionAsync(connection, user.UserId, tokens.HashRefreshToken(pair.RefreshToken), expires, ct, remember);
 
         return new SessionResponse(
             pair.AccessToken,
@@ -419,6 +424,7 @@ public static class AuthEndpoints
         IAuthStore store,
         IJwtTokenService tokens,
         LicenseGuard licenseGuard,
+        IOptions<AuthOptions> authOptions,
         CancellationToken ct)
     {
         var hash = tokens.HashRefreshToken(request.RefreshToken);
@@ -459,7 +465,10 @@ public static class AuthEndpoints
 
         // Rotate: the old token is revoked as the new one is issued, so a
         // stolen refresh token is usable at most once before it stops working.
-        await store.RotateRefreshTokenAsync(connection, hash, tokens.HashRefreshToken(pair.RefreshToken), userId, pair.RefreshExpiresAtUtc, ct);
+        /* A remembered session renews for another RememberMeDays on every refresh: in daily use it never runs out. */
+        var remember = await store.IsRememberedAsync(connection, hash, ct);
+        var expires = remember ? DateTime.UtcNow.AddDays(authOptions.Value.RememberMeDays) : pair.RefreshExpiresAtUtc;
+        await store.RotateRefreshTokenAsync(connection, hash, tokens.HashRefreshToken(pair.RefreshToken), userId, expires, ct, remember);
 
         return Results.Ok(new SessionResponse(
             pair.AccessToken, pair.RefreshToken, pair.AccessExpiresAtUtc,
