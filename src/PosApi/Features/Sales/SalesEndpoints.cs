@@ -109,6 +109,19 @@ public static class SalesEndpoints
                 document["id"] = saleId.ToString(CultureInfo.InvariantCulture); document["invoiceNumber"] = invoiceNumber; document["orderNo"] = orderNo;
                 document["sessionId"] = sessionId.ToString(CultureInfo.InvariantCulture); document["status"] = "completed"; document["soldAt"] = issuedAt;
                 document["createdAt"] = issuedAt; document["updatedAt"] = issuedAt;
+                /* "Sold by" is whoever is signed in, from the server's own user record, never what the device sends. */
+                if (long.TryParse(user.UserId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var sellerId))
+                {
+                    var sellerRow = (await q.Query("core.app_user").Where("user_id", sellerId).Select("name_en", "name_ar").GetAsync(tx))
+                        .Cast<IDictionary<string, object?>>().FirstOrDefault();
+                    if (sellerRow is not null)
+                    {
+                        document["cashierName"] = (string?)sellerRow["name_en"] ?? user.Username;
+                        document["cashierNameAr"] = (string?)sellerRow["name_ar"];
+                        document["soldByUserId"] = sellerId.ToString(CultureInfo.InvariantCulture);
+                        sale["cashierName"] = document["cashierName"]!.DeepClone();
+                    }
+                }
                 var zatca = document["zatca"] as JsonObject ?? new JsonObject();
                 zatca["uuid"] = uuid; zatca["icv"] = icv; zatca["invoiceHash"] = hash; zatca["previousInvoiceHash"] = pih;
                 zatca["qrBase64"] = qr; zatca["egsUnitId"] = egs;

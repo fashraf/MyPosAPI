@@ -45,7 +45,11 @@ $wacs = Join-Path $tools 'wacs.exe'
 if (-not (Test-Path $wacs)) {
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/win-acme/win-acme/releases/latest' -Headers @{ 'User-Agent' = 'mypos' }
-  $asset = $rel.assets | Where-Object { $_.name -match 'x64\.trimmed\.zip$' } | Select-Object -First 1
+  # Asset names change between releases (trimmed / pluggable / plain); take the best x64 zip available.
+  $zips = @($rel.assets | Where-Object { $_.name -match 'x64.*\.zip$' -and $_.name -notmatch 'arm' })
+  $asset = ($zips | Where-Object { $_.name -match 'trimmed' } | Select-Object -First 1)
+  if (-not $asset) { $asset = ($zips | Where-Object { $_.name -match 'pluggable' } | Select-Object -First 1) }
+  if (-not $asset) { $asset = $zips | Select-Object -First 1 }
   if (-not $asset) { throw "Could not find the win-acme download. Get it from https://www.win-acme.com and unzip to $tools" }
   New-Item -ItemType Directory -Force $tools | Out-Null
   $zip = Join-Path $env:TEMP $asset.name
