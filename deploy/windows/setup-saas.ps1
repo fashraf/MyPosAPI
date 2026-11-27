@@ -9,13 +9,17 @@ param(
   [Parameter(Mandatory)][ValidateSet('staging', 'production')][string]$Env,
   [Parameter(Mandatory)][string]$Domain,
   [Parameter(Mandatory)][string]$AdminEmail,
-  [string]$ControlDatabase = 'MYPOS_CONTROL'
+  [string]$ControlDatabase = 'MYPOS_CONTROL',
+  # POSSA is also served at http://<server IP>:<AdminPort> until admin.<domain> / adminpos.<domain> has DNS. 0 = off.
+  [int]$AdminPort = 9090,
+  # The console's own address (default admin.<domain>), e.g. adminpos.wateeq.com.
+  [string]$AdminHost = ''
 )
 . "$PSScriptRoot\lib.ps1"
 Import-Module WebAdministration
 $c = Get-Cfg $Env
 $Domain = $Domain.Trim().ToLower()
-$adminHost = "admin.$Domain"
+$adminHost = if ($AdminHost) { $AdminHost.Trim().ToLower() } else { "admin.$Domain" }
 function Step($m) { Write-Host "`n== $m" -ForegroundColor Cyan }
 
 Step "1/6 Control database $ControlDatabase (list of clients; never their sales)"
@@ -52,6 +56,13 @@ if (-not (Get-Website -Name $adminSite)) {
   if (-not (Test-Path "IIS:\AppPools\$adminSite")) { New-WebAppPool -Name $adminSite | Out-Null; Set-ItemProperty "IIS:\AppPools\$adminSite" managedRuntimeVersion '' }
   New-Website -Name $adminSite -Port 80 -HostHeader $adminHost -PhysicalPath (Join-Path $adminRoot 'current') -ApplicationPool $adminSite | Out-Null
 }
+if ($AdminPort -gt 0) {
+  if (-not (Get-WebBinding -Name $adminSite -Protocol http -Port $AdminPort)) { New-WebBinding -Name $adminSite -Protocol http -Port $AdminPort -IPAddress '*' }
+  if (-not (Get-NetFirewallRule -DisplayName "POSSA $AdminPort" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName "POSSA $AdminPort" -Direction Inbound -Protocol TCP -LocalPort $AdminPort -Action Allow | Out-Null
+  }
+  Write-Host "   also at http://<server IP>:$AdminPort"
+}
 # Same API as the clients: /api/sa on the admin host.
 Write-WebConfig $c (Join-Path $adminRoot 'current')
 if (-not (Test-Path (Join-Path $adminRoot 'current\index.html'))) {
@@ -72,6 +83,7 @@ Pop-Location
 Restart-WebAppPool -Name "$($c.site)-api"
 
 Write-Host "`nDONE." -ForegroundColor Green
+if ($AdminPort -gt 0) { Write-Host "  POSSA now: http://<server IP>:$AdminPort   (admin / admin@123, code 1234)" }
 Write-Host "  POSSA:   http://$adminHost   (sign in with $AdminEmail and the one-time password above, then change it)"
 Write-Host "  Clients: http://<name>.$Domain once created in POSSA."
 Write-Host "  HTTPS:   run add-https-host.ps1 -Address for $adminHost and for each client name (or a wildcard certificate)."

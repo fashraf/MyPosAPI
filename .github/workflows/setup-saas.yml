@@ -1,0 +1,33 @@
+name: Setup SaaS + POSSA
+# One click: control database, clients at *.<domain>, POSSA site (also at http://<server IP>:<port>), super admin.
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { description: "staging or production", required: true, default: production, type: choice, options: [production, staging] }
+      domain: { description: "Root domain for clients (pos1.<domain>)", required: true, default: wateeq.com }
+      admin_host: { description: "POSSA address once DNS exists", required: true, default: adminpos.wateeq.com }
+      admin_port: { description: "POSSA port on the server IP (0 = off)", required: true, default: "9090" }
+      admin_email: { description: "Super admin e-mail (besides the default admin / admin@123)", required: true }
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run setup-saas.ps1 on the server
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          H: ${{ secrets.DEPLOY_USER || 'Administrator' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }}
+          P: ${{ secrets.DEPLOY_PORT || '22' }}
+          ENV_NAME: ${{ inputs.environment }}
+          DOMAIN: ${{ inputs.domain }}
+          ADMIN_HOST: ${{ inputs.admin_host }}
+          ADMIN_PORT: ${{ inputs.admin_port }}
+          ADMIN_EMAIL: ${{ inputs.admin_email }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" | tr -d '\r' > ~/.ssh/id && chmod 600 ~/.ssh/id
+          O="-i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new"
+          for v in "$DOMAIN" "$ADMIN_HOST" "$ADMIN_EMAIL"; do [[ "$v" =~ ^[A-Za-z0-9.@_-]+$ ]] || { echo "::error::bad input $v"; exit 1; }; done
+          [[ "$ADMIN_PORT" =~ ^[0-9]+$ ]] || { echo "::error::bad port"; exit 1; }
+          scp $O -P "$P" deploy/windows/*.ps1 "$H:C:/Project/POS/bin/"
+          ssh $O -p "$P" "$H" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\Project\POS\bin\setup-saas.ps1 -Env $ENV_NAME -Domain $DOMAIN -AdminHost $ADMIN_HOST -AdminPort $ADMIN_PORT -AdminEmail $ADMIN_EMAIL; exit \$LASTEXITCODE"

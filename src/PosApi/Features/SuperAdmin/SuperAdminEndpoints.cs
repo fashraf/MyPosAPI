@@ -23,7 +23,7 @@ public static partial class SuperAdminEndpoints
 
     [GeneratedRegex(@"^[a-z][a-z0-9-]{1,38}[a-z0-9]\z")] private static partial Regex SlugRule();
 
-    public sealed record LoginBody(string Email, string Password);
+    public sealed record LoginBody(string? Email, string? Username, string? Mobile, string? Identifier, string Password, string? Otp);
     public sealed record DbBody(string Host, int Port, string Database, string User, string? Password);
     public sealed record CreateBody(string Slug, string Name, string? CustomHost, string? Plan, DbBody Db,
         string? ContactName, string? ContactEmail, string? ContactPhone, string? Notes);
@@ -43,7 +43,6 @@ public static partial class SuperAdminEndpoints
 
         g.MapGet("/me", (ICurrentUser user) => Results.Ok(new { email = user.Username, role = Role }));
         g.MapPost("/me/password", ChangePasswordAsync);
-        g.MapGet("/overview", OverviewAsync);
         g.MapGet("/tenants", ListAsync);
         g.MapGet("/tenants/{id:long}", GetAsync);
         g.MapPost("/tenants", CreateAsync);
@@ -57,21 +56,32 @@ public static partial class SuperAdminEndpoints
 
     /* ------------------------------------------------------------------ sign in */
 
-    private static async Task<IResult> LoginAsync(LoginBody body, ControlStore control, IPasswordHasher hasher, IJwtTokenService tokens, CancellationToken ct)
+    private static async Task<IResult> LoginAsync(LoginBody body, ControlStore control, IPasswordHasher hasher, IJwtTokenService tokens, IConfiguration config, CancellationToken ct)
     {
         if (!control.Options.IsMulti) return Error(404, "not_enabled", "SaaS mode is not switched on for this API.", "وضع الخدمة السحابية غير مفعل.");
         await using var c = await control.OpenAsync(ct);
-        var email = (body.Email ?? "").Trim().ToLowerInvariant();
-        var row = (await control.Query(c).Query("control.admin_user").Where("email", email).GetAsync(cancellationToken: ct))
-            .Cast<IDictionary<string, object?>>().FirstOrDefault();
-        if (row is null || !hasher.Verify(body.Password ?? "", (string)row["password_hash"]!, (string)row["password_salt"]!))
-            return Error(401, "bad_credentials", "Wrong email or password.", "البريد أو كلمة المرور غير صحيحة.");
+        /* The console's sign-in box takes a username or an email. */
+        var who = (body.Identifier ?? body.Username ?? body.Email ?? body.Mobile ?? "").Trim().ToLowerInvariant();
+        var row = (await control.Query(c).Query("control.admin_user").Where(w => w.Where("email", who).OrWhere("username", who))
+            .GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>().FirstOrDefault();
+        if (row is null || !(bool)(row["is_active"] ?? true) || !hasher.Verify(body.Password ?? "", (string)row["password_hash"]!, (string)row["password_salt"]!))
+            return Error(401, "bad_credentials", "That username or password is not correct.", "اسم المستخدم أو كلمة المرور غير صحيحة.");
+        /* Second step: the code (fixed while no SMS/e-mail sender is connected, like the POS sign-in). */
+        if (string.IsNullOrWhiteSpace(body.Otp))
+            return Results.Ok(new { otpRequired = true, name = (string)row["name"]! });
+        if (body.Otp.Trim() != (config["Auth:FixedDevOtp"] ?? "1234"))
+            return Error(401, "bad_code", "That code is not correct.", "الرمز غير صحيح.");
+        var email = (string)row["email"]!;
         await control.Query(c).Query("control.admin_user").Where("admin_id", row["admin_id"]).UpdateAsync(
             new Dictionary<string, object?> { ["last_login_at_utc"] = DateTime.UtcNow }, cancellationToken: ct);
         TenantContext.Admin = true;
         var pair = tokens.Issue(Convert.ToString(row["admin_id"])!, email, Role, ["sa.all"], []);
         await control.LogAsync(null, "admin_login", null, email, ct);
-        return Results.Ok(new { accessToken = pair.AccessToken, expiresAtUtc = pair.AccessExpiresAtUtc, name = (string)row["name"]!, email });
+        return Results.Ok(new
+        {
+            accessToken = pair.AccessToken, expiresAtUtc = pair.AccessExpiresAtUtc, name = (string)row["name"]!, email,
+            username = row["username"] as string, mustChangePassword = (bool)(row["must_change_password"] ?? false),
+        });
     }
 
     private static async Task<IResult> ChangePasswordAsync(PasswordBody body, ControlStore control, IPasswordHasher hasher, ICurrentUser user, CancellationToken ct)
@@ -83,7 +93,7 @@ public static partial class SuperAdminEndpoints
         if (row is null || !hasher.Verify(body.Current ?? "", (string)row["password_hash"]!, (string)row["password_salt"]!))
             return Error(401, "bad_credentials", "The current password is wrong.", "كلمة المرور الحالية غير صحيحة.");
         var (hash, salt) = hasher.Hash(body.Next!);
-        await q.UpdateAsync(new Dictionary<string, object?> { ["password_hash"] = hash, ["password_salt"] = salt }, cancellationToken: ct);
+        await q.UpdateAsync(new Dictionary<string, object?> { ["password_hash"] = hash, ["password_salt"] = salt, ["must_change_password"] = false }, cancellationToken: ct);
         return Results.NoContent();
     }
 
@@ -124,19 +134,26 @@ public static partial class SuperAdminEndpoints
 
     private static async Task<IResult> CreateAsync(CreateBody body, ControlStore control, ICurrentUser user, CancellationToken ct)
     {
+        var (id, error) = await CreateClientRowAsync(body, control, user, ct);
+        return error ?? Results.Ok(Shape((await Find(control, id!.Value, ct))!, control, SchemaMigrator.LatestClientVersion()));
+    }
+
+    /// <summary>The client row: address name checked, database tested, password encrypted. Used by both create paths.</summary>
+    internal static async Task<(long? Id, IResult? Error)> CreateClientRowAsync(CreateBody body, ControlStore control, ICurrentUser user, CancellationToken ct)
+    {
         var slug = (body.Slug ?? "").Trim().ToLowerInvariant();
         if (!SlugRule().IsMatch(slug) || Reserved.Contains(slug))
-            return Error(422, "bad_slug", "Use 3-40 lowercase letters, digits or dashes (e.g. pos1). Some names are reserved.", "استخدم 3-40 حرفًا إنجليزيًا صغيرًا أو أرقامًا أو شرطات (مثل pos1).");
-        if (string.IsNullOrWhiteSpace(body.Name)) return Error(422, "name_required", "Enter the client's name.", "أدخل اسم العميل.");
-        if (string.IsNullOrWhiteSpace(body.Db.Password)) return Error(422, "password_required", "Enter the database password.", "أدخل كلمة مرور قاعدة البيانات.");
+            return (null, Error(422, "bad_slug", "Use 3-40 lowercase letters, digits or dashes (e.g. pos1). Some names are reserved.", "استخدم 3-40 حرفًا إنجليزيًا صغيرًا أو أرقامًا أو شرطات (مثل pos1)."));
+        if (string.IsNullOrWhiteSpace(body.Name)) return (null, Error(422, "name_required", "Enter the client's name.", "أدخل اسم العميل."));
+        if (string.IsNullOrWhiteSpace(body.Db.Password)) return (null, Error(422, "password_required", "Enter the database password.", "أدخل كلمة مرور قاعدة البيانات."));
 
         var test = await Probe(control, body.Db, ct);
-        if (test.Error is not null) return Error(422, "db_unreachable", $"Could not connect to that database: {test.Error}", $"تعذر الاتصال بقاعدة البيانات: {test.Error}");
+        if (test.Error is not null) return (null, Error(422, "db_unreachable", $"Could not connect to that database: {test.Error}", $"تعذر الاتصال بقاعدة البيانات: {test.Error}"));
 
         await using var c = await control.OpenAsync(ct);
         var q = control.Query(c);
         if (await q.Query("control.tenant").Where("slug", slug).ExistsAsync(cancellationToken: ct))
-            return Error(409, "slug_taken", $"{slug} is already used by another client.", "هذا الاسم مستخدم لعميل آخر.");
+            return (null, Error(409, "slug_taken", $"{slug} is already used by another client.", "هذا الاسم مستخدم لعميل آخر."));
         var now = DateTime.UtcNow;
         var id = await q.Query("control.tenant").InsertGetIdAsync<long>(new Dictionary<string, object?>
         {
@@ -147,7 +164,7 @@ public static partial class SuperAdminEndpoints
         }, cancellationToken: ct);
         await control.LogAsync(id, "created", $"{slug}.{control.Options.RootDomain} → {body.Db.Host}/{body.Db.Database}", user.Username, ct);
         control.Forget();
-        return Results.Ok(Shape((await Find(control, id, ct))!, control, SchemaMigrator.LatestClientVersion()));
+        return (id, null);
     }
 
     private static async Task<IResult> UpdateAsync(long id, UpdateBody body, ControlStore control, ICurrentUser user, CancellationToken ct)
@@ -220,11 +237,19 @@ public static partial class SuperAdminEndpoints
     /// <summary>The client's business, first branch and owner account, in the client's own database.</summary>
     private static async Task<IResult> OwnerAsync(long id, OwnerBody body, ControlStore control, IAuthStore store, IDb db, ICurrentUser user, CancellationToken ct)
     {
+        var (branchId, userId, signInAt, error) = await CreateOwnerAsync(control, store, db, user, id, body, ct);
+        return error ?? Results.Ok(new { ok = true, userId, branchId, signInAt });
+    }
+
+    /// <summary>The business, its first branch, the owner and the standard roles, in the client's own database.</summary>
+    internal static async Task<(long? BranchId, string? UserId, string? SignInAt, IResult? Error)> CreateOwnerAsync(
+        ControlStore control, IAuthStore store, IDb db, ICurrentUser user, long id, OwnerBody body, CancellationToken ct)
+    {
         var row = await Find(control, id, ct);
-        if (row is null) return NotFound();
-        if (row["schema_version"] is null) return Error(409, "not_migrated", "Prepare the database first.", "جهّز قاعدة البيانات أولًا.");
+        if (row is null) return (null, null, null, NotFound());
+        if (row["schema_version"] is null) return (null, null, null, Error(409, "not_migrated", "Prepare the database first.", "جهّز قاعدة البيانات أولًا."));
         if (string.IsNullOrWhiteSpace(body.OwnerEmail) || string.IsNullOrWhiteSpace(body.BusinessNameAr) || string.IsNullOrWhiteSpace(body.BusinessNameEn))
-            return Error(422, "missing", "Business names (Arabic and English) and the owner's email are required.", "اسما المنشأة بالعربية والإنجليزية وبريد المالك مطلوبة.");
+            return (null, null, null, Error(422, "missing", "Business names (Arabic and English) and the owner's email are required.", "اسما المنشأة بالعربية والإنجليزية وبريد المالك مطلوبة."));
 
         var tenant = control.ToTenant(row);
         var before = TenantContext.Current;
@@ -236,16 +261,16 @@ public static partial class SuperAdminEndpoints
                 body.BusinessNameAr.Trim(), body.BusinessNameEn.Trim(), body.OwnerName.Trim(), body.OwnerName.Trim(),
                 body.OwnerEmail.Trim().ToLowerInvariant(), Blank(body.OwnerMobile)), ct);
             if (error != RegistrationError.None)
-                return Error(409, error.ToString(), $"The owner could not be created ({error}). An owner with that email may already exist.", "تعذر إنشاء المالك. قد يكون البريد مستخدمًا.");
+                return (null, null, null, Error(409, error.ToString(), $"The owner could not be created ({error}). An owner with that email may already exist.", "تعذر إنشاء المالك. قد يكون البريد مستخدمًا."));
             /* Standard roles with every permission the app uses (restaurant day, kitchen, finance …). No demo items or people. */
             var starter = Path.Combine(AppContext.BaseDirectory, "seed", "standard-roles.json");
             if (File.Exists(starter)) await PosApi.Data.Seeding.TenantSeeder.RunAsync(db, starter, TextWriter.Null);
             await using var c = await control.OpenAsync(ct);
             await control.Query(c).Query("control.tenant").Where("tenant_id", id).UpdateAsync(new Dictionary<string, object?>
-                { ["status"] = "active", ["contact_email"] = row["contact_email"] ?? body.OwnerEmail, ["updated_at_utc"] = DateTime.UtcNow }, cancellationToken: ct);
+                { ["status"] = "active", ["contact_email"] = row["contact_email"] ?? body.OwnerEmail, ["activated_at_utc"] = DateTime.UtcNow, ["activated_by"] = user.Username, ["updated_at_utc"] = DateTime.UtcNow }, cancellationToken: ct);
             await control.LogAsync(id, "owner_created", $"{body.OwnerEmail} (user {userId}, branch {branchId})", user.Username, ct);
             control.Forget();
-            return Results.Ok(new { ok = true, userId, branchId, signInAt = $"https://{tenant.Slug}.{control.Options.RootDomain}" });
+            return (long.TryParse(branchId, out var b) ? b : 1, userId, $"https://{tenant.Slug}.{control.Options.RootDomain}", null);
         }
         finally { TenantContext.Current = before; }
     }
@@ -347,5 +372,6 @@ public static partial class SuperAdminEndpoints
     private static string Tail(string text) => text.Length > 4000 ? text[^4000..] : text;
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     private static IResult NotFound() => Error(404, "not_found", "That client does not exist.", "هذا العميل غير موجود.");
-    private static IResult Error(int status, string code, string en, string ar) => Results.Json(ApiError.Create(code, en, ar), statusCode: status);
+    private static IResult Error(int status, string code, string en, string ar) =>
+        Results.Json(new { code, message = en, messageEn = en, messageAr = ar }, statusCode: status);
 }

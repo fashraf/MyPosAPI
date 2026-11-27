@@ -18,4 +18,6 @@ public sealed class SqlServerProvider : IDatabaseProvider, ISqlDialect
     public string InsertReturningId(string insertSql, string idColumn) =>
         insertSql.Replace(" VALUES", string.Concat(" OUTPUT inserted.", idColumn, " VALUES"), StringComparison.OrdinalIgnoreCase);
     public string UtcNow => "SYSUTCDATETIME()";
+
+    public string DatabaseSizeBytes => "SELECT CAST(SUM(CAST(size AS BIGINT)) * 8192 AS BIGINT) FROM sys.database_files";
 }
