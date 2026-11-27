@@ -319,18 +319,26 @@ public static class RestaurantSessionEndpoints
     private static async Task<JsonObject> CashBreakdown(QueryFactory q, IDictionary<string, object?> s, DbTransaction? tx, CancellationToken ct = default)
     {
         var id = Convert.ToInt64(s["session_id"]);
+        /* Cash taken this day: sales still standing, plus sales cancelled on a later day (that cash was collected here). */
         var cashSales = await q.Query("sales.sale_payment as p").Join("sales.sale as s", "s.sale_id", "p.sale_id")
-            .Where("s.session_id", id).Where("s.status", "<>", "voided").Where("p.method", "cash")
+            .Where("s.session_id", id).Where("p.method", "cash")
+            .Where(w => w.Where("s.status", "<>", "voided").OrWhere(v => v.WhereNotNull("s.void_session_id").Where("s.void_session_id", "<>", id)))
+            .SumAsync<long?>("p.amount_h", tx) ?? 0;
+        /* Cash handed back today for a sale from an earlier day that was cancelled today. */
+        var lateVoids = await q.Query("sales.sale_payment as p").Join("sales.sale as s", "s.sale_id", "p.sale_id")
+            .Where("s.void_session_id", id).Where("s.session_id", "<>", id).Where("p.method", "cash")
             .SumAsync<long?>("p.amount_h", tx) ?? 0;
         var movements = (await q.Query("sales.session_movement").Where("session_id", id)
             .Select("movement_type").SelectRaw("SUM(amount_h) AS total").GroupBy("movement_type").GetAsync(tx))
             .Select(Row).ToDictionary(r => (string)r["movement_type"]!, r => Convert.ToInt64(r["total"]));
         long M(string t) => movements.GetValueOrDefault(t);
         var opening = Convert.ToInt64(s["opening_balance_h"]);
-        var expected = opening + cashSales + M("addition") - M("expense") - M("withdrawal") - M("transfer");
+        /* Cash handed back for returns during this day. */
+        var refunds = (await q.Query("sales.credit_note").Where("session_id", id).Where("refund_method", "cash").SumAsync<long?>("total_h", tx) ?? 0) + lateVoids;
+        var expected = opening + cashSales + M("addition") - refunds - M("expense") - M("withdrawal") - M("transfer");
         return new JsonObject
         {
-            ["openingH"] = opening, ["salesH"] = cashSales, ["additionsH"] = M("addition"), ["refundsH"] = 0,
+            ["openingH"] = opening, ["salesH"] = cashSales, ["additionsH"] = M("addition"), ["refundsH"] = refunds,
             ["expensesH"] = M("expense"), ["withdrawalsH"] = M("withdrawal"), ["transfersH"] = M("transfer"), ["expectedH"] = expected,
         };
     }

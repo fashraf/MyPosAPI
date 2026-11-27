@@ -507,6 +507,7 @@ try
     PosApi.Features.Kitchen.KitchenTicketEndpoints.MapKitchenTicketEndpoints(app);
     PosApi.Features.Store.TenantStoreEndpoints.MapTenantStoreEndpoints(app);
     PosApi.Features.Orders.OrderTimelineEndpoints.MapOrderTimelineEndpoints(app);
+    PosApi.Features.Sales.CreditNoteEndpoints.MapCreditNoteEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
