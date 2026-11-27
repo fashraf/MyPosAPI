@@ -253,9 +253,13 @@ public static class SalesEndpoints
                 document["voidedBy"] = actor; document["voidedAt"] = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                 /* An edit cancels the old invoice and names the new one, so every device shows "Edited → #n". */
                 if (!string.IsNullOrWhiteSpace(body.ReplacedByInvoice)) document["replacedByInvoice"] = body.ReplacedByInvoice;
+                object? openDay = await q.Query("sales.restaurant_session").Where("branch_id", Convert.ToInt64(row["branch_id"]))
+                    .Where("status", "open").Select("session_id").FirstOrDefaultAsync(tx);
+                long? voidSession = openDay is null ? null : Convert.ToInt64(((IDictionary<string, object?>)openDay)["session_id"]);
+                if (voidSession is not null) document["voidSessionId"] = voidSession.Value.ToString(CultureInfo.InvariantCulture);
                 await q.Query("sales.sale").Where("sale_id", saleId).UpdateAsync(new Dictionary<string, object?>
                 {
-                    ["status"] = "voided", ["void_reason"] = body.Reason, ["voided_at_utc"] = now, ["voided_by"] = actor,
+                    ["status"] = "voided", ["void_reason"] = body.Reason, ["voided_at_utc"] = now, ["voided_by"] = actor, ["void_session_id"] = voidSession,
                     ["document_json"] = document.ToJsonString(), ["updated_at_utc"] = now,
                 }, tx);
                 foreach (object line in await q.Query("sales.sale_line").Where("sale_id", saleId).GetAsync(tx))
