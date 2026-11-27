@@ -42,4 +42,7 @@ public interface ISqlDialect
 
     /// <summary>Size of the connected database in bytes (POSSA usage figures).</summary>
     string DatabaseSizeBytes { get; }
+
+    /// <summary>Creates an empty database (name already checked: lowercase letters, digits, underscore) owned by the user.</summary>
+    string CreateDatabase(string name, string owner);
 }

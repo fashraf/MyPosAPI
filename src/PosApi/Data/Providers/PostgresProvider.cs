@@ -22,4 +22,5 @@ public sealed class PostgresProvider : IDatabaseProvider, ISqlDialect
     public string UtcNow => "(now() at time zone 'utc')";
 
     public string DatabaseSizeBytes => "SELECT pg_database_size(current_database())";
+    public string CreateDatabase(string name, string owner) => $"CREATE DATABASE \"{name}\" OWNER \"{owner}\"";
 }

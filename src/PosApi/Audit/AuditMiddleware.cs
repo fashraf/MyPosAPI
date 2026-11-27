@@ -56,6 +56,25 @@ public sealed class AuditMiddleware
         var currentPage = context.Request.Headers["X-Current-Page"].ToString();
         var previousPage = context.Request.Headers["X-Previous-Page"].ToString();
 
+        /* Sign-in requests come before anyone is signed in: take the name typed into the form, so the attempt says who. */
+        string? typedName = null;
+        if (path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsPost(context.Request.Method)
+            && (context.Request.ContentLength ?? 0) is > 0 and < 8192)
+        {
+            context.Request.EnableBuffering();
+            try
+            {
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(context.Request.Body);
+                foreach (var key in new[] { "identifier", "username", "email", "mobile" })
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                        && doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String && v.GetString() is { Length: > 0 } name)
+                    { typedName = name.Length > 120 ? name[..120] : name; break; }
+            }
+            catch (System.Text.Json.JsonException) { /* not JSON: nothing to read */ }
+            finally { context.Request.Body.Position = 0; }
+            if (typedName is not null) context.Items["TypedName"] = typedName;
+        }
+
         var stopwatch = Stopwatch.StartNew();
         string? error = null;
         var queries = new PosApi.Data.Profiling.RequestQueryLog();
@@ -81,7 +100,7 @@ public sealed class AuditMiddleware
             {
                 CorrelationId = correlationId,
                 UserId = NullIfEmpty(current.UserId),
-                Username = NullIfEmpty(current.Username),
+                Username = NullIfEmpty(current.Username) ?? typedName,
                 ApiPath = path,
                 HttpMethod = context.Request.Method,
                 CurrentPage = NullIfEmpty(currentPage),
@@ -116,7 +135,7 @@ public sealed class AuditMiddleware
         _audit.Record(new AuditEntry
         {
             UserId = NullIfEmpty(current.UserId),
-            Username = NullIfEmpty(current.Username),
+            Username = NullIfEmpty(current.Username) ?? context.Items["TypedName"] as string,
             RoleId = NullIfEmpty(current.RoleId),
             Action = ActionFor(path, method, status),
             Module = ModuleFor(path),

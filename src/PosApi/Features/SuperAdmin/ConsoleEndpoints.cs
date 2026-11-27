@@ -137,7 +137,7 @@ public static class ConsoleEndpoints
 
         return new JsonObject
         {
-            ["id"] = id.ToString(CultureInfo.InvariantCulture), ["slug"] = slug,
+            ["id"] = id.ToString(CultureInfo.InvariantCulture), ["slug"] = slug, ["guid"] = r.TryGetValue("client_guid", out var guid) ? guid as string : null,
             ["url"] = $"https://{(r["custom_host"] as string) ?? $"{slug}.{control.Options.RootDomain}"}",
             ["name"] = (string)r["name"]!, ["nameAr"] = (r["name_ar"] as string) ?? (string)r["name"]!,
             ["plan"] = (r["plan_code"] as string) ?? (r["plan"] as string) ?? "Basic",
@@ -320,9 +320,13 @@ public static class ConsoleEndpoints
                     roles[(string)r["role_id"]!] = (r.TryGetValue("name_en", out var n) ? n as string : null) ?? (string)r["role_id"]!;
             }
             catch { /* roles table missing: show the code */ }
-            var rows = await q.Query("core.app_user").OrderBy("user_id").GetAsync(cancellationToken: ct);
-            return rows.Cast<IDictionary<string, object?>>().Select(u => (object)new
+            var rows = (await q.Query("core.app_user").OrderBy("user_id").GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>().ToList();
+            /* The admin: the account Ayn created (the owner). Everyone else was created by the client. */
+            var firstId = rows.Select(u => Convert.ToString(u["user_id"], CultureInfo.InvariantCulture)).FirstOrDefault();
+            return rows.Select(u => (object)new
             {
+                isAdmin = ((string?)u["role_id"] ?? "").Contains("owner", StringComparison.OrdinalIgnoreCase) || Convert.ToString(u["user_id"], CultureInfo.InvariantCulture) == firstId,
+                createdBy = Convert.ToString(u["user_id"], CultureInfo.InvariantCulture) == firstId ? "Ayn" : "Client",
                 id = Convert.ToString(u["user_id"], CultureInfo.InvariantCulture), clientId = id.ToString(CultureInfo.InvariantCulture), clientName = t.Name, scope = "client",
                 name = (u["name_en"] as string) ?? (u["name_ar"] as string), username = u["username"] as string, email = u["email"] as string, mobile = u["phone"] as string,
                 role = roles.GetValueOrDefault((string?)u["role_id"] ?? "", (string?)u["role_id"] ?? ""), branchId = (string?)null, branchName = (string?)null,
@@ -475,6 +479,17 @@ public static class ConsoleEndpoints
         var name = S("companyName");
         var slug = S("slug").ToLowerInvariant();
         var dbNode = body["db"] as JsonObject ?? new JsonObject();
+        /* "Create a database for this client": a new empty one named after the client's GUID, on the control database's server. */
+        var clientGuid = Guid.NewGuid().ToString("N");
+        if (body["createDatabase"] is JsonValue cdv && cdv.TryGetValue<bool>(out var createDb) && createDb)
+        {
+            if (string.IsNullOrWhiteSpace(S("companyName"))) return Error(422, "name_required", "A company name is required.", "اسم الشركة مطلوب.");
+            var (dbName, dbError) = await PosApi.Observability.ObservabilityEndpoints.CreateClientDatabaseAsync(control, $"ayn_{clientGuid}", ct);
+            if (dbError is not null) return Error(422, "db_create_failed", dbError, "تعذر إنشاء قاعدة البيانات.");
+            var login = control.ServerLogin();
+            dbNode = new JsonObject { ["host"] = login.Host, ["port"] = login.Port, ["database"] = dbName, ["user"] = login.User, ["password"] = login.Password };
+            await Record(control, null, "database.create", "Created database", null, dbName, S("companyName"), user, http, ct);
+        }
         string D(string k) => dbNode[k]?.ToString()?.Trim() ?? "";
         var dbBody = new SuperAdminEndpoints.DbBody(D("host"), int.TryParse(D("port"), out var port) ? port : 5432, D("database"), D("user"), D("password"));
         if (string.IsNullOrWhiteSpace(name)) return Error(422, "name_required", "A company name is required.", "اسم الشركة مطلوب.");
@@ -505,6 +520,7 @@ public static class ConsoleEndpoints
                 ["vat_rate"] = body["defaultVat"] is JsonValue vv && vv.TryGetValue<int>(out var vat) ? vat : 15,
                 ["prices_include_vat"] = !(body["pricesIncludeVat"] is JsonValue pv && pv.TryGetValue<bool>(out var inc) && !inc),
                 ["cr_number"] = S("cr"), ["vat_number"] = S("vat"), ["registered_by"] = user.Username, ["updated_at_utc"] = DateTime.UtcNow,
+                ["client_guid"] = clientGuid, ["notes"] = S("notes") is { Length: > 0 } nt ? nt : null,
             }, cancellationToken: ct);
         }
 

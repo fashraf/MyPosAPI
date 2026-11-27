@@ -12,6 +12,15 @@ public sealed record TenantDb(string Host, int Port, string Database, string Use
 public sealed class ControlStore(IDatabaseProvider provider, IConfiguration config, IOptions<TenancyOptions> options)
 {
     public const string SecretPurpose = "tenant-db";
+    public IDatabaseProvider Provider => provider;
+
+    /// <summary>The database server the control database lives on (new client databases are created there).</summary>
+    public (string Host, int Port, string User, string Password) ServerLogin()
+    {
+        var b = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = ControlConnectionString };
+        string Get(params string[] keys) => keys.Select(k => b.TryGetValue(k, out var v) ? v?.ToString() : null).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? "";
+        return (Get("Host", "Server") is { Length: > 0 } h ? h : "localhost", int.TryParse(Get("Port"), out var p) ? p : 5432, Get("Username", "User ID", "User"), Get("Password"));
+    }
     private readonly ConcurrentDictionary<string, (TenantInfo? Tenant, DateTime At)> _cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(30);
 

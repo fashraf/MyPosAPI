@@ -18,9 +18,11 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Te
         var host = http.Request.Host.Host;
         if (path.StartsWithSegments("/health") && !path.StartsWithSegments("/health/db")) { await next(http); return; }
 
-        if (string.Equals(host, options.Value.AdminHost, StringComparison.OrdinalIgnoreCase) || path.StartsWithSegments("/api/sa"))
+        /* Ayn itself: its own address, its API, or its error reports (sent with header X-App: ayn from the IP address too). */
+        if (string.Equals(host, options.Value.AdminHost, StringComparison.OrdinalIgnoreCase) || path.StartsWithSegments("/api/sa")
+            || (path.StartsWithSegments("/api/telemetry") && http.Request.Headers["X-App"] == "ayn"))
         {
-            if (!path.StartsWithSegments("/api/sa") && !path.StartsWithSegments("/health"))
+            if (!path.StartsWithSegments("/api/sa") && !path.StartsWithSegments("/health") && !path.StartsWithSegments("/api/telemetry"))
             {
                 await Refuse(http, 404, "not_found", "Not found.", "غير موجود.");
                 return;
