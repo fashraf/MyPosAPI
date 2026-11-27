@@ -61,6 +61,10 @@ try
         return await PosApi.Features.SuperAdmin.SuperAdminSetup.CreateAdminAsync(builder.Configuration, args[adminAt + 1],
             adminAt + 2 < args.Length ? args[adminAt + 2] : "Super admin");
 
+    if (Array.IndexOf(args, "--register-main") is var mainAt and >= 0 && mainAt + 1 < args.Length)
+        return await PosApi.Features.SuperAdmin.SuperAdminSetup.RegisterMainAsync(builder.Configuration, args[mainAt + 1],
+            mainAt + 2 < args.Length ? args[mainAt + 2] : "Main");
+
     // "dotnet PosApi.dll --seed seed/tenant-alnoor.json": add missing setup data (branches, users, roles, catalog). Never
     // overwrites anything and never creates activity. Run after --migrate.
     if (Array.IndexOf(args, "--seed") is var seedAt and >= 0 && seedAt + 1 < args.Length)

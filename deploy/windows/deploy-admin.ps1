@@ -5,10 +5,10 @@ param([Parameter(Mandatory)][string]$Env, [Parameter(Mandatory)][string]$Tag, [P
 . "$PSScriptRoot\lib.ps1"
 Import-Module WebAdministration
 $c = Get-Cfg $Env
-$site = 'MyPOS-admin'
+$site = if ($Env -eq 'production') { 'MyPOS-admin' } else { 'MyPOS-admin-staging' }
 if (-not (Get-Website -Name $site)) { throw "Site $site is missing. Run setup-saas.ps1 first." }
 if (-not (Test-Path $Zip)) { throw "Package not found: $Zip" }
-$adminRoot = Join-Path $Root 'POSAdmin'
+$adminRoot = Join-Path $Root $(if ($Env -eq 'production') { 'POSAdmin' } else { 'POSAdmin-staging' })
 $rel = Join-Path $adminRoot "releases\$Tag"
 if (Test-Path $rel) { Remove-Item $rel -Recurse -Force }
 Expand-Archive -Path $Zip -DestinationPath $rel -Force
