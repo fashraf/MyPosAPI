@@ -215,6 +215,7 @@ try
     builder.Services.AddScoped<ICurrentUser, CurrentUser>();
     builder.Services.Configure<PosApi.Tenancy.TenancyOptions>(builder.Configuration.GetSection(PosApi.Tenancy.TenancyOptions.Section));
     builder.Services.AddSingleton<PosApi.Tenancy.ControlStore>();
+    builder.Services.AddSingleton<PosApi.Tenancy.ClientMetrics>();
     builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
@@ -521,6 +522,7 @@ try
     PosApi.Features.Zatca.ZatcaSetupEndpoints.MapZatcaSetupEndpoints(app);
     PosApi.Features.SuperAdmin.SuperAdminEndpoints.MapSuperAdminEndpoints(app);
     PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
+    PosApi.Features.SuperAdmin.ConsoleEndpoints.MapConsoleEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();

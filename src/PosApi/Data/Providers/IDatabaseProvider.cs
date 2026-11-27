@@ -39,4 +39,7 @@ public interface ISqlDialect
 
     /// <summary>Current UTC timestamp expression.</summary>
     string UtcNow { get; }
+
+    /// <summary>Size of the connected database in bytes (POSSA usage figures).</summary>
+    string DatabaseSizeBytes { get; }
 }

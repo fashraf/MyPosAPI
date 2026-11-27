@@ -20,4 +20,6 @@ public sealed class PostgresProvider : IDatabaseProvider, ISqlDialect
         "UPDATE number_series SET last_value = last_value + 1 WHERE series_key = @Key AND scope_id = @Scope RETURNING last_value";
     public string InsertReturningId(string insertSql, string idColumn) => string.Concat(insertSql, " RETURNING ", idColumn);
     public string UtcNow => "(now() at time zone 'utc')";
+
+    public string DatabaseSizeBytes => "SELECT pg_database_size(current_database())";
 }
