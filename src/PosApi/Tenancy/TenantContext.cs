@@ -13,6 +13,11 @@ public sealed class TenancyOptions
     public string RootDomain { get; set; } = "wateeq.com";
     /// <summary>The super admin app (POSSA). Requests to this host reach only /api/sa and /health.</summary>
     public string AdminHost { get; set; } = "admin.wateeq.com";
+    /// <summary>
+    /// The client served at any address that names no client (the server's IP, e.g. http://1.2.3.4:8080). Lets the
+    /// environment's original database keep working by IP while every new client gets its own address. Empty = 404.
+    /// </summary>
+    public string? FallbackSlug { get; set; }
     public bool IsMulti => string.Equals(Mode, "multi", StringComparison.OrdinalIgnoreCase);
 }
 

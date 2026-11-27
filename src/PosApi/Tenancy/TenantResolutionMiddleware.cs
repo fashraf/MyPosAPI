@@ -34,6 +34,8 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next, IOptions<Te
         }
 
         var tenant = await control.ResolveAsync(host, http.RequestAborted);
+        if (tenant is null && !string.IsNullOrWhiteSpace(options.Value.FallbackSlug))
+            tenant = await control.ResolveAsync($"{options.Value.FallbackSlug}.{options.Value.RootDomain}", http.RequestAborted);
         if (tenant is null) { await Refuse(http, 404, "unknown_client", $"No business is set up at {host}.", "لا توجد منشأة على هذا العنوان."); return; }
         if (tenant.Status == "suspended") { await Refuse(http, 403, "client_suspended", "This account is paused. Contact support.", "هذا الحساب موقوف مؤقتًا. تواصل مع الدعم."); return; }
 

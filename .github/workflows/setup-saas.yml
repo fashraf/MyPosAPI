@@ -3,7 +3,7 @@ name: Setup SaaS + POSSA
 on:
   workflow_dispatch:
     inputs:
-      environment: { description: "staging or production", required: true, default: production, type: choice, options: [production, staging] }
+      environment: { description: "staging or production", required: true, default: staging, type: choice, options: [staging, production] }
       domain: { description: "Root domain for clients (pos1.<domain>)", required: true, default: wateeq.com }
       admin_host: { description: "POSSA address once DNS exists", required: true, default: adminpos.wateeq.com }
       admin_port: { description: "POSSA port on the server IP (0 = off)", required: true, default: "9090" }

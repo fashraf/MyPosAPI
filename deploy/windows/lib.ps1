@@ -161,6 +161,7 @@ function Write-ApiConfig($c, [string]$Folder, [string]$Tag) {
     $vars['Tenancy__AdminHost'] = $c.saas.adminHost
     $vars['ConnectionStrings__Control'] = Get-ControlConnection $c
     $vars['Secrets__Key'] = $c.saas.secretsKey
+    if ($c.saas.PSObject.Properties['fallbackSlug'] -and $c.saas.fallbackSlug) { $vars['Tenancy__FallbackSlug'] = $c.saas.fallbackSlug }
   }
   $envXml = ($vars.GetEnumerator() | ForEach-Object { "        <environmentVariable name=`"$($_.Key)`" value=`"$([Security.SecurityElement]::Escape([string]$_.Value))`" />" }) -join "`n"
   @"
