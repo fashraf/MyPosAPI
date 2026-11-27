@@ -43,6 +43,8 @@ $secrets = if ($json.PSObject.Properties['saas'] -and $json.saas.secretsKey) { $
 $json | Add-Member -NotePropertyName saas -NotePropertyValue ([pscustomobject]@{
   controlDatabase = $ControlDatabase; rootDomain = $Domain; adminHost = $adminHost; secretsKey = $secrets; fallbackSlug = 'main' }) -Force
 $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $cfgFile
+$c = Get-Cfg $Env   # read again: everything below needs the saas settings just saved
+if (-not (Test-Saas $c)) { throw "The saas settings did not save to $cfgFile." }
 Write-Host "   OK (keep secretsKey safe: it encrypts every client's database password)" -ForegroundColor Yellow
 
 Step "3/6 IIS: every client at *.$Domain on site $($c.site)"
@@ -57,7 +59,15 @@ $adminRoot = Join-Path $Root $(if ($Env -eq 'production') { 'POSAdmin' } else { 
 New-Item -ItemType Directory -Force (Join-Path $adminRoot 'current') | Out-Null
 if (-not (Get-Website -Name $adminSite)) {
   if (-not (Test-Path "IIS:\AppPools\$adminSite")) { New-WebAppPool -Name $adminSite | Out-Null; Set-ItemProperty "IIS:\AppPools\$adminSite" managedRuntimeVersion '' }
-  New-Website -Name $adminSite -Port 80 -HostHeader $adminHost -PhysicalPath (Join-Path $adminRoot 'current') -ApplicationPool $adminSite | Out-Null
+  New-Website -Name $adminSite -Port $(if ($AdminPort -gt 0) { $AdminPort } else { 80 }) -IPAddress '*' -PhysicalPath (Join-Path $adminRoot 'current') -ApplicationPool $adminSite | Out-Null
+}
+# The address name (adminpos.wateeq.com) can belong to one site only; two sites with the same one cannot both start.
+$hostTaken = Get-Website | Where-Object { $_.Name -ne $adminSite } | ForEach-Object { Get-WebBinding -Name $_.Name -Protocol http -Port 80 -HostHeader $adminHost }
+if ($hostTaken) {
+  Write-Host "   $adminHost already belongs to another site; this one answers on port $AdminPort only."
+  Get-WebBinding -Name $adminSite -Protocol http -Port 80 -HostHeader $adminHost | Remove-WebBinding
+} elseif (-not (Get-WebBinding -Name $adminSite -Protocol http -Port 80 -HostHeader $adminHost)) {
+  New-WebBinding -Name $adminSite -Protocol http -Port 80 -HostHeader $adminHost
 }
 if ($AdminPort -gt 0) {
   # The port belongs to one environment at a time: take it from the other POSSA site if it has it.
@@ -72,6 +82,8 @@ if ($AdminPort -gt 0) {
   }
   Write-Host "   also at http://<server IP>:$AdminPort"
 }
+Start-Website -Name $adminSite -ErrorAction SilentlyContinue
+if ((Get-Website -Name $adminSite).State -ne 'Started') { throw "Site $adminSite would not start (an address it uses is taken by another site)." }
 # Same API as the clients: /api/sa on the admin host.
 Write-WebConfig $c (Join-Path $adminRoot 'current')
 if (-not (Test-Path (Join-Path $adminRoot 'current\index.html'))) {
@@ -85,12 +97,15 @@ Write-ApiConfig $c $apiCurrent (Get-Current $c 'api')
 Push-Location $apiCurrent
 $env:Database__Provider = 'postgres'; $env:Tenancy__Mode = 'multi'; $env:ConnectionStrings__Control = Get-ControlConnection $c; $env:Secrets__Key = $secrets
 & dotnet .\PosApi.dll --migrate
+if ($LASTEXITCODE -ne 0) { throw "Database update failed (see above)." }
 # The environment's own database becomes client "main" (served at the server's IP).
 $env:ConnectionStrings__PosMain = "Host=localhost;Port=5432;Database=$($c.database);Username=$($c.dbUser);Password=$($c.dbPassword)"
 & dotnet .\PosApi.dll --register-main main $MainName
+if ($LASTEXITCODE -ne 0) { throw "Listing the main database failed (see above)." }
 Remove-Item Env:\ConnectionStrings__PosMain
 Step "6/6 Super admin account"
 & dotnet .\PosApi.dll --create-admin $AdminEmail "Super admin"
+if ($LASTEXITCODE -ne 0) { throw "Creating the super admin failed (see above)." }
 foreach ($v in 'Database__Provider', 'Tenancy__Mode', 'ConnectionStrings__Control', 'Secrets__Key') { Remove-Item "Env:\$v" -ErrorAction SilentlyContinue }
 Pop-Location
 Restart-WebAppPool -Name "$($c.site)-api"
