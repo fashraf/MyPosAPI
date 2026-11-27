@@ -1,36 +1,32 @@
-using System.Data;
-using System.Text.Json;
-using Dapper;
-using Microsoft.Data.SqlClient;
+using System.Data.Common;
+using System.Text.Json.Nodes;
 using PosApi.Auth;
 using PosApi.Common;
 using PosApi.Data;
+using PosApi.Features.Catalog;
+using SqlKata.Execution;
 
 namespace PosApi.Features.Sales;
 
 public sealed record OpenSessionRequest(
-    string BranchId, string? RegisterId, long OpeningBalanceH, DateTime? OpenedAt, DateOnly? BusinessDate,
-    string? Notes, string? IdempotencyKey);
+    string BranchId, string? RegisterId, long OpeningBalanceH, string? OpeningNotes, string? Notes,
+    DateOnly? BusinessDate, string? OpenedBy, string? IdempotencyKey);
 public sealed record CloseSessionRequest(
-    long ActualClosingH, string? ClosingNotes, string? DiscrepancyReason, string? PendingOverrideReason,
-    JsonElement? Summary, string? IdempotencyKey);
-public sealed record CashMovementRequest(string Type, long AmountH, string Description);
-public sealed record ReopenRequest(string Reason);
-public sealed record SessionSettingsRequest(int LongSessionHours, long DiscrepancyThresholdH);
+    long ActualClosingH, string? ClosingNotes, string? DiscrepancyReason, string? ClosedBy, JsonObject? Summary);
+public sealed record CashMovementRequest(string Type, long AmountH, string Description, string? CreatedBy);
+public sealed record ReopenRequest(string Reason, string? ReopenedBy);
 
 /// <summary>
-/// Restaurant business sessions: open, move cash, close, reopen, history.
+/// Restaurant business sessions (the trading day): open, move cash, close, reopen, history.
 ///
-/// Every rule lives in the database (db-migrations/28-restaurant-sessions.sql)
-/// so it holds no matter which client calls: one open session per register
-/// (filtered unique index), no order without an open session (trigger, error
-/// 52090), a reason for every cash difference (check constraint), and an audit
-/// log that cannot be edited (INSTEAD OF trigger). This file only maps HTTP to
-/// those procedures and turns their errors into bilingual responses.
+/// Rules held here, for every client: one open session per till (unique open_key in the database), no sale without
+/// an open session (checked in the sale transaction), session numbers from the number series (1001, 1002 …), the
+/// expected cash computed on the server from its own sales and movements, and a reason required for any difference.
 /// </summary>
 public static class RestaurantSessionEndpoints
 {
     private const string View = "restaurant.session.view";
+    private static readonly HashSet<string> MovementTypes = new() { "addition", "expense", "withdrawal", "transfer" };
 
     public static void MapRestaurantSessionEndpoints(this IEndpointRouteBuilder app)
     {
@@ -39,311 +35,392 @@ public static class RestaurantSessionEndpoints
             .RequireAuthorization()
             .RequireRateLimiting("standard");
 
+        g.MapGet("/state", StateAsync).RequireAuthorization(PermissionPolicy.For(View));
         g.MapGet("/status", StatusAsync).RequireAuthorization(PermissionPolicy.For(View));
         g.MapGet("/current", CurrentAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapGet("/settings", SettingsAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapPut("/settings", SaveSettingsAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.approve_discrepancy"));
         g.MapGet("/history", HistoryAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
-        g.MapGet("/{id}", GetAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapGet("/{id}/sales-summary", SalesSummaryAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapGet("/{id}/payment-summary", PaymentSummaryAsync).RequireAuthorization(PermissionPolicy.For(View));
-        g.MapGet("/{id}/cash-movements", MovementsAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.view"));
-        g.MapPost("/{id}/cash-movements", AddMovementAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.create"));
-        g.MapGet("/{id}/closing-preview", ClosingPreviewAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reconcile"));
-        g.MapGet("/{id}/report", ReportAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_reports"));
-        g.MapGet("/{id}/audit-log", AuditAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
+        g.MapGet("/{id:long}", GetAsync).RequireAuthorization(PermissionPolicy.For(View));
+        g.MapGet("/{id:long}/cash-movements", MovementsAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.view"));
+        g.MapGet("/{id:long}/audit-log", AuditAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.view_history"));
+        g.MapGet("/{id:long}/closing-preview", PreviewAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reconcile"));
         g.MapPost("/open", OpenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.open"));
-        g.MapPost("/{id}/close", CloseAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.close"));
-        g.MapPost("/{id}/reopen", ReopenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reopen"));
-
-        var tax = app.MapGroup("/api/settings/tax").WithTags("Tax").RequireAuthorization();
-        tax.MapGet("", TaxAsync);
-        tax.MapPut("", SaveTaxAsync).RequireAuthorization(PermissionPolicy.For("settings.edit"));
+        g.MapPost("/{id:long}/cash-movements", AddMovementAsync).RequireAuthorization(PermissionPolicy.For("restaurant.cash_movement.create"));
+        g.MapPost("/{id:long}/close", CloseAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.close"));
+        g.MapPost("/{id:long}/reopen", ReopenAsync).RequireAuthorization(PermissionPolicy.For("restaurant.session.reopen"));
     }
 
-    /* --------------------------------------------------------------- reads */
+    /* ---------------------------------------------------------------- reads */
 
-    private static async Task<IResult> StatusAsync(string? branchId, ISqlConnectionFactory db, CancellationToken ct)
+    /// <summary>Everything a till needs to show the day: recent sessions with their movements and audit trail.</summary>
+    private static async Task<IResult> StateAsync(IDb db, string? branchId, int days = 45, CancellationToken ct = default)
     {
-        await using var c = db.Create();
-        var s = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            "SELECT TOP (1) * FROM rest.RestaurantSession WHERE Status = N'open' AND (@b IS NULL OR BranchId = @b) ORDER BY OpenedAtUtc DESC;",
-            new { b = branchId }, cancellationToken: ct));
-        return Results.Ok(new { open = s is not null, session = s });
+        await using var conn = await db.OpenAsync(ct);
+        var q = db.Query(conn);
+        var since = DateTime.UtcNow.Date.AddDays(-Math.Clamp(days, 1, 400));
+        var s = q.Query("sales.restaurant_session").Where(w => w.Where("opened_at_utc", ">=", since).OrWhere("status", "open"));
+        if (long.TryParse(branchId, out var branch)) s.Where("branch_id", branch);
+        var sessions = (await s.OrderByDesc("opened_at_utc").GetAsync(cancellationToken: ct)).Select(Row).ToList();
+        var ids = sessions.Select(x => Convert.ToInt64(x["session_id"])).ToArray();
+
+        var movements = ids.Length == 0 ? new List<JsonObject>() : (await q.Query("sales.session_movement").WhereIn("session_id", ids)
+            .OrderBy("created_at_utc").GetAsync(cancellationToken: ct)).Select(Row).Select(MovementDoc).ToList();
+        var audit = ids.Length == 0 ? new List<JsonObject>() : (await q.Query("sales.session_audit").WhereIn("session_id", ids)
+            .OrderBy("created_at_utc").GetAsync(cancellationToken: ct)).Select(Row).Select(AuditDoc).ToList();
+
+        return Results.Ok(new { sessions = sessions.Select(SessionDoc).ToList(), movements, audit, serverTimeUtc = DateTime.UtcNow });
     }
 
-    private static async Task<IResult> CurrentAsync(string? branchId, bool? includeClosed, ISqlConnectionFactory db, CancellationToken ct)
+    private static async Task<IResult> StatusAsync(IDb db, string? branchId, CancellationToken ct)
     {
-        await using var c = db.Create();
-        var s = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            """
-            SELECT TOP (1) * FROM rest.RestaurantSession
-            WHERE (@b IS NULL OR BranchId = @b) AND (@all = 1 OR Status = N'open')
-            ORDER BY OpenedAtUtc DESC;
-            """,
-            new { b = branchId, all = includeClosed == true }, cancellationToken: ct));
-        /* No open session is a normal state, not a 404. */
-        return Results.Ok(s);
+        await using var conn = await db.OpenAsync(ct);
+        var open = await OpenSession(db.Query(conn), branchId, null, null);
+        return Results.Ok(new { open = open is not null, session = open is null ? null : SessionDoc(open) });
     }
 
-    private static async Task<IResult> GetAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
+    private static async Task<IResult> CurrentAsync(IDb db, string? branchId, bool? includeClosed, CancellationToken ct)
     {
-        await using var c = db.Create();
-        var s = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            "SELECT * FROM rest.RestaurantSession WHERE SessionId = @id;", new { id }, cancellationToken: ct));
-        return s is null ? NotFound() : Results.Ok(s);
+        await using var conn = await db.OpenAsync(ct);
+        var x = db.Query(conn).Query("sales.restaurant_session");
+        if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
+        if (includeClosed != true) x.Where("status", "open");
+        object? row = await x.OrderByDesc("opened_at_utc").FirstOrDefaultAsync(cancellationToken: ct);
+        return Results.Ok(row is null ? null : SessionDoc(Row(row)));
     }
 
-    private static async Task<IResult> SalesSummaryAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
+    private static async Task<IResult> HistoryAsync(IDb db, string? branchId, int page = 1, int pageSize = 30, CancellationToken ct = default)
     {
-        await using var c = db.Create();
-        var frozen = await c.ExecuteScalarAsync<string?>(new CommandDefinition(
-            "SELECT SummaryJson FROM rest.RestaurantSession WHERE SessionId = @id AND Status = N'closed';", new { id }, cancellationToken: ct));
-        if (frozen is not null) return Results.Text(frozen, "application/json");
-
-        var row = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            """
-            SELECT
-              COUNT(*)                                                                    AS orders,
-              SUM(CASE WHEN s.Status <> N'voided' OR ISNULL(s.VoidSessionId, s.SessionId) <> s.SessionId THEN 1 ELSE 0 END) AS completed,
-              SUM(CASE WHEN s.Status = N'voided' AND ISNULL(s.VoidSessionId, s.SessionId) = s.SessionId THEN 1 ELSE 0 END)  AS cancelled,
-              SUM(CASE WHEN s.Status = N'voided' AND ISNULL(s.VoidSessionId, s.SessionId) = s.SessionId THEN 0 ELSE s.TotalH END)    AS totalH,
-              SUM(CASE WHEN s.Status = N'voided' AND ISNULL(s.VoidSessionId, s.SessionId) = s.SessionId THEN 0 ELSE s.TaxH END)      AS vatH,
-              SUM(CASE WHEN s.Status = N'voided' AND ISNULL(s.VoidSessionId, s.SessionId) = s.SessionId THEN 0 ELSE s.DiscountH END) AS discountsH
-            FROM sales.Sale AS s WHERE s.SessionId = @id;
-            """, new { id }, cancellationToken: ct));
-        var cash = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            "SELECT * FROM rest.fn_ExpectedCash(@id);", new { id }, cancellationToken: ct));
-        return Results.Ok(new { totals = row, cash });
-    }
-
-    private static async Task<IResult> PaymentSummaryAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        var rows = await c.QueryAsync(new CommandDefinition(
-            "SELECT Method AS method, Orders AS [count], AmountH AS amountH FROM rest.vw_SessionMethodTotals WHERE SessionId = @id;",
-            new { id }, cancellationToken: ct));
-        return Results.Ok(rows);
-    }
-
-    private static async Task<IResult> MovementsAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        var rows = await c.QueryAsync(new CommandDefinition(
-            "SELECT * FROM rest.CashMovement WHERE SessionId = @id ORDER BY CreatedAtUtc DESC;", new { id }, cancellationToken: ct));
-        return Results.Ok(rows);
-    }
-
-    private static async Task<IResult> AuditAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        var rows = await c.QueryAsync(new CommandDefinition(
-            "SELECT * FROM rest.SessionAuditLog WHERE SessionId = @id ORDER BY AtUtc;", new { id }, cancellationToken: ct));
-        return Results.Ok(rows);
-    }
-
-    private static async Task<IResult> ClosingPreviewAsync(string id, ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        var session = await c.QuerySingleOrDefaultAsync(new CommandDefinition(
-            "SELECT * FROM rest.RestaurantSession WHERE SessionId = @id;", new { id }, cancellationToken: ct));
-        if (session is null) return NotFound();
-        var cash = await c.QuerySingleAsync(new CommandDefinition("SELECT * FROM rest.fn_ExpectedCash(@id);", new { id }, cancellationToken: ct));
-        var methods = await c.QueryAsync(new CommandDefinition(
-            "SELECT Method AS method, Orders AS [count], AmountH AS amountH FROM rest.vw_SessionMethodTotals WHERE SessionId = @id;",
-            new { id }, cancellationToken: ct));
-        var settings = await c.QuerySingleAsync(new CommandDefinition("SELECT * FROM rest.SessionSettings;", cancellationToken: ct));
-        return Results.Ok(new { session, cash, methods, settings });
-    }
-
-    private static Task<IResult> ReportAsync(string id, ISqlConnectionFactory db, CancellationToken ct) => GetAsync(id, db, ct);
-
-    private static async Task<IResult> HistoryAsync(
-        string? branchId, DateOnly? from, DateOnly? to, string? status, string? difference, string? user, string? search,
-        ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        var rows = await c.QueryAsync(new CommandDefinition(
-            """
-            SELECT TOP (500) SessionId, SessionNumber, BranchId, RegisterId, BusinessDate, Status, OpenedAtUtc, OpenedByName,
-                   OpeningBalanceH, ClosedAtUtc, ClosedByName, ExpectedClosingH, ActualClosingH, DifferenceH,
-                   JSON_VALUE(SummaryJson, '$.totalH') AS TotalSalesH
-            FROM rest.RestaurantSession
-            WHERE (@b IS NULL OR BranchId = @b)
-              AND (@from IS NULL OR BusinessDate >= @from) AND (@to IS NULL OR BusinessDate <= @to)
-              AND (@status IS NULL OR @status = N'all' OR Status = @status)
-              AND (@diff IS NULL OR @diff = N'all'
-                   OR (@diff = N'shortage' AND DifferenceH < 0) OR (@diff = N'surplus' AND DifferenceH > 0)
-                   OR (@diff = N'balanced' AND DifferenceH = 0))
-              AND (@user IS NULL OR OpenedByName LIKE N'%' + @user + N'%' OR ClosedByName LIKE N'%' + @user + N'%')
-              AND (@q IS NULL OR SessionNumber LIKE N'%' + @q + N'%' OR CONVERT(NVARCHAR(10), BusinessDate, 23) LIKE N'%' + @q + N'%')
-            ORDER BY OpenedAtUtc DESC;
-            """,
-            new { b = branchId, from, to, status, diff = difference, user, q = search }, cancellationToken: ct));
-        return Results.Ok(rows);
-    }
-
-    private static async Task<IResult> SettingsAsync(ISqlConnectionFactory db, CancellationToken ct)
-    {
-        await using var c = db.Create();
-        return Results.Ok(await c.QuerySingleAsync(new CommandDefinition(
-            "SELECT LongSessionHours AS longSessionHours, DiscrepancyThresholdH AS discrepancyThresholdH FROM rest.SessionSettings;", cancellationToken: ct)));
-    }
-
-    /* -------------------------------------------------------------- writes */
-
-    private static async Task<IResult> OpenAsync(OpenSessionRequest r, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
-    {
-        if (!me.CanSeeBranch(r.BranchId)) return Results.Forbid();
-        await using var c = db.Create();
-        var p = new DynamicParameters();
-        p.Add("@BranchId", r.BranchId);
-        p.Add("@RegisterId", r.RegisterId ?? "reg_main");
-        p.Add("@OpeningBalanceH", r.OpeningBalanceH);
-        p.Add("@OpenedAtUtc", r.OpenedAt?.ToUniversalTime());
-        p.Add("@BusinessDate", r.BusinessDate);
-        p.Add("@Notes", r.Notes);
-        p.Add("@UserId", me.UserId);
-        p.Add("@UserName", me.Username);
-        p.Add("@SessionId", dbType: DbType.String, direction: ParameterDirection.Output, size: 40);
-        try
+        var paging = new PageQuery { Page = page <= 0 ? 1 : page, PageSize = pageSize };
+        await using var conn = await db.OpenAsync(ct);
+        SqlKata.Query Base()
         {
-            await c.ExecuteAsync(new CommandDefinition("rest.usp_OpenSession", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            var x = db.Query(conn).Query("sales.restaurant_session");
+            if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
+            return x;
         }
-        catch (SqlException ex) when (IsRule(ex)) { return Fail(ex); }
-        return await GetAsync(p.Get<string>("@SessionId"), db, ct);
+        var total = await Base().CountAsync<int>(cancellationToken: ct);
+        var rows = await Base().OrderByDesc("opened_at_utc").Offset(paging.Offset).Limit(paging.PageSize).GetAsync(cancellationToken: ct);
+        return Results.Ok(new PagedResult<JsonObject>
+        {
+            Items = rows.Select(Row).Select(SessionDoc).ToList(), Page = paging.Page, PageSize = paging.PageSize, TotalCount = total,
+        });
     }
 
-    private static async Task<IResult> AddMovementAsync(string id, CashMovementRequest r, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
+    private static async Task<IResult> GetAsync(long id, IDb db, CancellationToken ct)
     {
-        var type = r.Type.ToLowerInvariant() switch
-        {
-            "addition" => "CASH_ADDITION", "expense" => "CASH_EXPENSE", "withdrawal" => "CASH_WITHDRAWAL",
-            "transfer" => "CASH_TRANSFER", var other => other.ToUpperInvariant(),
-        };
-        await using var c = db.Create();
-        var p = new DynamicParameters(new { SessionId = id, Type = type, r.AmountH, r.Description, UserId = me.UserId, UserName = me.Username });
-        p.Add("@MovementId", dbType: DbType.String, direction: ParameterDirection.Output, size: 40);
-        try
-        {
-            await c.ExecuteAsync(new CommandDefinition("rest.usp_AddCashMovement", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
-        }
-        catch (SqlException ex) when (IsRule(ex)) { return Fail(ex); }
-        return Results.Created($"/api/restaurant-sessions/{id}/cash-movements", new { movementId = p.Get<string>("@MovementId") });
+        await using var conn = await db.OpenAsync(ct);
+        object? row = await db.Query(conn).Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(cancellationToken: ct);
+        return row is null ? NotFound() : Results.Ok(SessionDoc(Row(row)));
     }
 
-    private static async Task<IResult> CloseAsync(string id, CloseSessionRequest r, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
+    private static async Task<IResult> MovementsAsync(long id, IDb db, CancellationToken ct)
     {
-        await using var c = db.Create();
-        var threshold = await c.ExecuteScalarAsync<long>(new CommandDefinition("SELECT DiscrepancyThresholdH FROM rest.SessionSettings;", cancellationToken: ct));
+        await using var conn = await db.OpenAsync(ct);
+        var rows = await db.Query(conn).Query("sales.session_movement").Where("session_id", id).OrderBy("created_at_utc").GetAsync(cancellationToken: ct);
+        return Results.Ok(rows.Select(Row).Select(MovementDoc));
+    }
+
+    private static async Task<IResult> AuditAsync(long id, IDb db, CancellationToken ct)
+    {
+        await using var conn = await db.OpenAsync(ct);
+        var rows = await db.Query(conn).Query("sales.session_audit").Where("session_id", id).OrderBy("created_at_utc").GetAsync(cancellationToken: ct);
+        return Results.Ok(rows.Select(Row).Select(AuditDoc));
+    }
+
+    /// <summary>The expected cash in the drawer right now, worked out on the server.</summary>
+    private static async Task<IResult> PreviewAsync(long id, IDb db, CancellationToken ct)
+    {
+        await using var conn = await db.OpenAsync(ct);
+        object? row = await db.Query(conn).Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(cancellationToken: ct);
+        if (row is null) return NotFound();
+        return Results.Ok(await CashBreakdown(db.Query(conn), Row(row), null));
+    }
+
+    /* --------------------------------------------------------------- writes */
+
+    private static async Task<IResult> OpenAsync(OpenSessionRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.BranchId))
+            return Error(422, "branch_required", "Choose the branch to open.", "اختر الفرع المراد فتحه.");
+        if (body.OpeningBalanceH < 0)
+            return Error(422, "bad_opening", "The opening cash cannot be negative.", "لا يمكن أن يكون النقد الافتتاحي سالبًا.");
+        if (!user.CanSeeBranch(body.BranchId))
+            return Error(403, "branch_forbidden", "You do not have access to this branch.", "ليست لديك صلاحية على هذا الفرع.");
+
+        var register = string.IsNullOrWhiteSpace(body.RegisterId) ? "reg_main" : body.RegisterId!;
+        var actor = string.IsNullOrWhiteSpace(body.OpenedBy) ? user.Username : body.OpenedBy!;
+        var now = DateTime.UtcNow;
         try
         {
-            var closed = await c.QuerySingleAsync(new CommandDefinition("rest.usp_CloseSession", new
+            var doc = await db.InTransactionAsync(async (conn, tx) =>
             {
-                SessionId = id,
-                r.ActualClosingH,
-                r.ClosingNotes,
-                r.DiscrepancyReason,
-                r.PendingOverrideReason,
-                CanApprove = me.Can("restaurant.session.approve_discrepancy"),
-                ThresholdH = threshold,
-                SummaryJson = r.Summary?.GetRawText(),
-                UserId = me.UserId,
-                UserName = me.Username,
-            }, commandType: CommandType.StoredProcedure, cancellationToken: ct));
-            return Results.Ok(closed);
+                var q = db.Query(conn);
+                if (await OpenSession(q, body.BranchId, register, tx) is { } already)
+                    throw new ConflictException(SessionDoc(already));
+
+                var no = await numbers.NextAsync(conn, tx, "session");
+                var id = no;                                    // the session number is its key: 1001, 1002 …
+                var businessDate = body.BusinessDate ?? DateOnly.FromDateTime(RiyadhBusinessDate(now));
+                var notes = body.OpeningNotes ?? body.Notes ?? "";
+                await q.Query("sales.restaurant_session").InsertAsync(new Dictionary<string, object?>
+                {
+                    ["session_id"] = id, ["session_no"] = no, ["branch_id"] = BranchKey(body.BranchId), ["register_id"] = register,
+                    ["business_date"] = businessDate.ToDateTime(TimeOnly.MinValue), ["status"] = "open",
+                    ["open_key"] = $"{body.BranchId}|{register}", ["opened_at_utc"] = now, ["opened_by"] = actor,
+                    ["opened_by_id"] = UserKey(user.UserId), ["opening_balance_h"] = body.OpeningBalanceH, ["opening_notes"] = notes,
+                    ["last_order_no"] = 0, ["reopen_count"] = 0, ["created_at_utc"] = now, ["updated_at_utc"] = now,
+                }, tx);
+                await Audit(q, tx, numbers, conn, id, "opened", $"Restaurant opened with SAR {body.OpeningBalanceH / 100m:0.00} float", null, body.OpeningBalanceH.ToString(), actor, now);
+                return SessionDoc(Row((await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx))));
+            }, ct);
+            return Results.Ok(doc);
         }
-        catch (SqlException ex) when (IsRule(ex)) { return Fail(ex); }
+        catch (ConflictException c)
+        {
+            return Results.Json(new { code = "already_open", messageEn = "The restaurant is already open on this till.",
+                messageAr = "المطعم مفتوح بالفعل على هذا الجهاز.", session = c.Session }, statusCode: 409);
+        }
     }
 
-    private static async Task<IResult> ReopenAsync(string id, ReopenRequest r, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
+    private static async Task<IResult> AddMovementAsync(long id, CashMovementRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
     {
-        await using var c = db.Create();
+        if (!MovementTypes.Contains(body.Type))
+            return Error(422, "bad_type", "Unknown cash movement type.", "نوع حركة نقدية غير معروف.");
+        if (body.AmountH <= 0)
+            return Error(422, "bad_amount", "Enter an amount above zero.", "أدخل مبلغًا أكبر من صفر.");
+        if (string.IsNullOrWhiteSpace(body.Description))
+            return Error(422, "description_required", "Say what the cash was for.", "اذكر سبب الحركة النقدية.");
+
+        var actor = string.IsNullOrWhiteSpace(body.CreatedBy) ? user.Username : body.CreatedBy!;
+        var now = DateTime.UtcNow;
+        var result = await db.InTransactionAsync<object?>(async (conn, tx) =>
+        {
+            var q = db.Query(conn);
+            var s = await q.Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(tx);
+            if (s is null) return null;
+            if ((string)((IDictionary<string, object?>)s)["status"]! != "open") return "closed";
+            var mid = await numbers.NextAsync(conn, tx, "session_movement");
+            await q.Query("sales.session_movement").InsertAsync(new Dictionary<string, object?>
+            {
+                ["movement_id"] = mid, ["session_id"] = id, ["movement_type"] = body.Type, ["amount_h"] = body.AmountH,
+                ["description"] = body.Description.Trim(), ["user_name"] = actor, ["created_at_utc"] = now,
+            }, tx);
+            await Audit(q, tx, numbers, conn, id, "cash_movement", $"{body.Type}: SAR {body.AmountH / 100m:0.00} — {body.Description.Trim()}", null, body.AmountH.ToString(), actor, now);
+            return MovementDoc(Row(await q.Query("sales.session_movement").Where("movement_id", mid).FirstAsync(tx)));
+        }, ct);
+
+        return result switch
+        {
+            null => NotFound(),
+            "closed" => Error(409, "session_closed", "This day is already closed.", "تم إغلاق هذا اليوم بالفعل."),
+            _ => Results.Ok(result),
+        };
+    }
+
+    private static async Task<IResult> CloseAsync(long id, CloseSessionRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
+    {
+        if (body.ActualClosingH < 0)
+            return Error(422, "bad_count", "The counted cash cannot be negative.", "لا يمكن أن يكون النقد المعدود سالبًا.");
+        var actor = string.IsNullOrWhiteSpace(body.ClosedBy) ? user.Username : body.ClosedBy!;
+        var now = DateTime.UtcNow;
+
+        var outcome = await db.InTransactionAsync<object?>(async (conn, tx) =>
+        {
+            var q = db.Query(conn);
+            object? raw = await q.Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(tx);
+            if (raw is null) return null;
+            var s = Row(raw);
+            if ((string)s["status"]! != "open") return "closed";
+
+            var cash = await CashBreakdown(q, s, tx);
+            var expected = (long)cash["expectedH"]!;
+            var diff = body.ActualClosingH - expected;
+            if (diff != 0 && string.IsNullOrWhiteSpace(body.DiscrepancyReason)) return ("reason", expected, diff);
+
+            var details = CatalogEndpoints.Parse(s["details_json"]) ?? new JsonObject();
+            if (body.Summary is not null) details["summary"] = body.Summary.DeepClone();
+            details["cashServer"] = cash;
+            await q.Query("sales.restaurant_session").Where("session_id", id).UpdateAsync(new Dictionary<string, object?>
+            {
+                ["status"] = "closed", ["open_key"] = $"closed:{id}", ["closed_at_utc"] = now, ["closed_by"] = actor, ["closed_by_id"] = UserKey(user.UserId),
+                ["expected_cash_h"] = expected, ["actual_closing_h"] = body.ActualClosingH, ["discrepancy_h"] = diff,
+                ["discrepancy_reason"] = body.DiscrepancyReason, ["closing_notes"] = body.ClosingNotes,
+                ["details_json"] = details.ToJsonString(), ["updated_at_utc"] = now,
+            }, tx);
+            await Audit(q, tx, numbers, conn, id, "closed",
+                $"Restaurant closed. Expected SAR {expected / 100m:0.00}, counted SAR {body.ActualClosingH / 100m:0.00}, difference SAR {diff / 100m:0.00}",
+                expected.ToString(), body.ActualClosingH.ToString(), actor, now);
+            return SessionDoc(Row(await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx)));
+        }, ct);
+
+        return outcome switch
+        {
+            null => NotFound(),
+            "closed" => Error(409, "session_closed", "This day is already closed.", "تم إغلاق هذا اليوم بالفعل."),
+            ValueTuple<string, long, long> r => Results.Json(new
+            {
+                code = "reason_required", expectedH = r.Item2, differenceH = r.Item3,
+                messageEn = "The counted cash does not match. Choose a reason for the difference.",
+                messageAr = "النقد المعدود لا يطابق المتوقع. اختر سبب الفرق.",
+            }, statusCode: 422),
+            _ => Results.Ok(outcome),
+        };
+    }
+
+    private static async Task<IResult> ReopenAsync(long id, ReopenRequest body, IDb db, INumberSeries numbers, ICurrentUser user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.Reason))
+            return Error(422, "reason_required", "Say why the day is being reopened.", "اذكر سبب إعادة فتح اليوم.");
+        var actor = string.IsNullOrWhiteSpace(body.ReopenedBy) ? user.Username : body.ReopenedBy!;
+        var now = DateTime.UtcNow;
         try
         {
-            await c.ExecuteAsync(new CommandDefinition("rest.usp_ReopenSession",
-                new { SessionId = id, r.Reason, UserId = me.UserId, UserName = me.Username },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            var outcome = await db.InTransactionAsync<object?>(async (conn, tx) =>
+            {
+                var q = db.Query(conn);
+                object? raw = await q.Query("sales.restaurant_session").Where("session_id", id).FirstOrDefaultAsync(tx);
+                if (raw is null) return null;
+                var s = Row(raw);
+                if ((string)s["status"]! == "open") return "open";
+                if (await OpenSession(q, Convert.ToInt64(s["branch_id"]).ToString(), (string)s["register_id"]!, tx) is { } other)
+                    throw new ConflictException(SessionDoc(other));
+                await q.Query("sales.restaurant_session").Where("session_id", id).UpdateAsync(new Dictionary<string, object?>
+                {
+                    ["status"] = "open", ["open_key"] = $"{s["branch_id"]}|{s["register_id"]}", ["closed_at_utc"] = null,
+                    ["reopen_count"] = Convert.ToInt32(s["reopen_count"]) + 1, ["updated_at_utc"] = now,
+                }, tx);
+                await Audit(q, tx, numbers, conn, id, "reopened", $"Reopened: {body.Reason.Trim()}", "closed", "open", actor, now);
+                return SessionDoc(Row(await q.Query("sales.restaurant_session").Where("session_id", id).FirstAsync(tx)));
+            }, ct);
+            return outcome switch
+            {
+                null => NotFound(),
+                "open" => Error(409, "already_open", "This day is already open.", "هذا اليوم مفتوح بالفعل."),
+                _ => Results.Ok(outcome),
+            };
         }
-        catch (SqlException ex) when (IsRule(ex) || ex.Number == 2601) { return Fail(ex); }
-        return await GetAsync(id, db, ct);
+        catch (ConflictException)
+        {
+            return Error(409, "another_open", "Another day is open on this till. Close it first.", "يوجد يوم آخر مفتوح على هذا الجهاز. أغلقه أولًا.");
+        }
     }
 
-    private static async Task<IResult> SaveSettingsAsync(SessionSettingsRequest r, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
+    /* -------------------------------------------------------------- helpers */
+
+    internal static async Task<IDictionary<string, object?>?> OpenSession(QueryFactory q, string? branchId, string? registerId, DbTransaction? tx)
     {
-        if (r.LongSessionHours <= 0 || r.DiscrepancyThresholdH < 0)
-            return Results.Json(ApiError.Create("invalid_settings", "Thresholds must be positive numbers.", "يجب أن تكون الحدود أرقامًا موجبة."), statusCode: 422);
-        await using var c = db.Create();
-        await c.ExecuteAsync(new CommandDefinition(
-            """
-            UPDATE rest.SessionSettings SET LongSessionHours = @h, DiscrepancyThresholdH = @t, UpdatedAtUtc = SYSUTCDATETIME(), UpdatedBy = @by;
-            INSERT rest.SessionAuditLog (Action, Description, NewValue, UserId, UserName)
-            VALUES (N'settings_changed', N'Alert thresholds changed', CONCAT(@h, N'h / ', @t), @uid, @by);
-            """, new { h = r.LongSessionHours, t = r.DiscrepancyThresholdH, by = me.Username, uid = me.UserId }, cancellationToken: ct));
-        return await SettingsAsync(db, ct);
+        var x = q.Query("sales.restaurant_session").Where("status", "open");
+        if (long.TryParse(branchId, out var branch)) x.Where("branch_id", branch);
+        if (!string.IsNullOrWhiteSpace(registerId)) x.Where("register_id", registerId);
+        object? row = await x.OrderByDesc("opened_at_utc").FirstOrDefaultAsync(tx);
+        return row is null ? null : Row(row);
     }
 
-    private static async Task<IResult> TaxAsync(ISqlConnectionFactory db, CancellationToken ct)
+    /// <summary>Opening + cash taken − change given + additions − expenses − withdrawals − transfers.</summary>
+    private static async Task<JsonObject> CashBreakdown(QueryFactory q, IDictionary<string, object?> s, DbTransaction? tx, CancellationToken ct = default)
     {
-        await using var c = db.Create();
-        var json = await c.ExecuteScalarAsync<string>(new CommandDefinition("SELECT SettingsJson FROM core.TaxSettings WHERE SettingsId = 1;", cancellationToken: ct));
-        return Results.Text(json ?? "{}", "application/json");
+        var id = Convert.ToInt64(s["session_id"]);
+        /* Cash taken this day: sales still standing, plus sales cancelled on a later day (that cash was collected here). */
+        var cashSales = await q.Query("sales.sale_payment as p").Join("sales.sale as s", "s.sale_id", "p.sale_id")
+            .Where("s.session_id", id).Where("p.method", "cash")
+            .Where(w => w.Where("s.status", "<>", "voided").OrWhere(v => v.WhereNotNull("s.void_session_id").Where("s.void_session_id", "<>", id)))
+            .SumAsync<long?>("p.amount_h", tx) ?? 0;
+        /* Cash handed back today for a sale from an earlier day that was cancelled today. */
+        var lateVoids = await q.Query("sales.sale_payment as p").Join("sales.sale as s", "s.sale_id", "p.sale_id")
+            .Where("s.void_session_id", id).Where("s.session_id", "<>", id).Where("p.method", "cash")
+            .SumAsync<long?>("p.amount_h", tx) ?? 0;
+        var movements = (await q.Query("sales.session_movement").Where("session_id", id)
+            .Select("movement_type").SelectRaw("SUM(amount_h) AS total").GroupBy("movement_type").GetAsync(tx))
+            .Select(Row).ToDictionary(r => (string)r["movement_type"]!, r => Convert.ToInt64(r["total"]));
+        long M(string t) => movements.GetValueOrDefault(t);
+        var opening = Convert.ToInt64(s["opening_balance_h"]);
+        /* Cash handed back for returns during this day. */
+        var refunds = (await q.Query("sales.credit_note").Where("session_id", id).Where("refund_method", "cash").SumAsync<long?>("total_h", tx) ?? 0) + lateVoids;
+        var expected = opening + cashSales + M("addition") - refunds - M("expense") - M("withdrawal") - M("transfer");
+        return new JsonObject
+        {
+            ["openingH"] = opening, ["salesH"] = cashSales, ["additionsH"] = M("addition"), ["refundsH"] = refunds,
+            ["expensesH"] = M("expense"), ["withdrawalsH"] = M("withdrawal"), ["transfersH"] = M("transfer"), ["expectedH"] = expected,
+        };
     }
 
-    private static async Task<IResult> SaveTaxAsync(JsonElement body, ISqlConnectionFactory db, ICurrentUser me, CancellationToken ct)
+    private static async Task Audit(QueryFactory q, DbTransaction tx, INumberSeries numbers, DbConnection conn, long sessionId,
+        string action, string description, string? oldValue, string? newValue, string user, DateTime at) =>
+        await q.Query("sales.session_audit").InsertAsync(new Dictionary<string, object?>
+        {
+            ["session_audit_id"] = await numbers.NextAsync(conn, tx, "session_audit"), ["session_id"] = sessionId, ["action"] = action,
+            ["description"] = description, ["old_value"] = oldValue, ["new_value"] = newValue, ["user_name"] = user, ["created_at_utc"] = at,
+        }, tx);
+
+    /// <summary>Before 05:00 Riyadh time the night still belongs to the previous business day.</summary>
+    internal static DateTime RiyadhBusinessDate(DateTime utc)
     {
-        bool enabled = body.TryGetProperty("enabled", out var e) && e.GetBoolean();
-        string country = body.TryGetProperty("country", out var co) ? co.GetString() ?? "SA" : "SA";
-        string regime = body.TryGetProperty("regime", out var re) ? re.GetString() ?? "vat" : "vat";
-        bool inclusive = body.TryGetProperty("pricesIncludeTax", out var pi) && pi.GetBoolean();
-        string? reg = body.TryGetProperty("registrationNumber", out var rn) ? rn.GetString() : null;
-        if (!body.TryGetProperty("rates", out var rates) || rates.GetArrayLength() == 0)
-            return Results.Json(ApiError.Create("validation_failed", "Add at least one rate.", "أضف نسبة واحدة على الأقل."), statusCode: 422);
-
-        await using var c = db.Create();
-        await c.ExecuteAsync(new CommandDefinition(
-            """
-            UPDATE core.TaxSettings
-               SET Enabled = @enabled, Country = @country, Regime = @regime, PricesIncludeTax = @inclusive,
-                   RegistrationNumber = @reg, SettingsJson = @json, UpdatedAtUtc = SYSUTCDATETIME(), UpdatedBy = @by
-             WHERE SettingsId = 1;
-            """, new { enabled, country, regime, inclusive, reg, json = body.GetRawText(), by = me.Username }, cancellationToken: ct));
-        return await TaxAsync(db, ct);
+        var riyadh = utc.AddHours(3);
+        return (riyadh.Hour < 5 ? riyadh.AddDays(-1) : riyadh).Date;
     }
 
-    /* -------------------------------------------------------------- errors */
+    internal static IDictionary<string, object?> Row(object row) => (IDictionary<string, object?>)row;
 
-    private static bool IsRule(SqlException ex) => (ex.Number >= 56000 && ex.Number < 56100) || ex.Number == 52090;
+    /// <summary>Branch ids are integers; the API carries them as text ("1").</summary>
+    internal static long BranchKey(string? value) => long.TryParse(value, out var id) ? id : 0;
+
+    /// <summary>The signed-in user's integer id, or null when it is not a number (should not happen).</summary>
+    internal static long? UserKey(string? value) => long.TryParse(value, out var id) ? id : null;
+
+    private static string Iso(object? v) => v is DateTime d ? DateTime.SpecifyKind(d, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : "";
+
+    internal static JsonObject SessionDoc(IDictionary<string, object?> r)
+    {
+        var details = CatalogEndpoints.Parse(r["details_json"]);
+        var doc = new JsonObject
+        {
+            ["id"] = Convert.ToInt64(r["session_id"]).ToString(), ["number"] = Convert.ToInt64(r["session_no"]).ToString(),
+            ["branchId"] = Convert.ToInt64(r["branch_id"]).ToString(), ["registerId"] = (string)r["register_id"]!,
+            ["businessDate"] = r["business_date"] is DateTime bd ? bd.ToString("yyyy-MM-dd") : r["business_date"]?.ToString(),
+            ["status"] = (string)r["status"]!, ["openedAt"] = Iso(r["opened_at_utc"]), ["openedBy"] = (string)r["opened_by"]!,
+            ["openedById"] = r["opened_by_id"] is null ? null : Convert.ToInt64(r["opened_by_id"]).ToString(), ["openingBalanceH"] = Convert.ToInt64(r["opening_balance_h"]),
+            ["openingNotes"] = r["opening_notes"] as string ?? "", ["lastOrderNo"] = Convert.ToInt32(r["last_order_no"]),
+            ["reopenCount"] = Convert.ToInt32(r["reopen_count"]),
+            ["createdAt"] = Iso(r["created_at_utc"]), ["updatedAt"] = Iso(r["updated_at_utc"]),
+        };
+        if (r["closed_at_utc"] is DateTime) doc["closedAt"] = Iso(r["closed_at_utc"]);
+        if (r["closed_by"] is string cb) doc["closedBy"] = cb;
+        if (r["closed_by_id"] is not null) doc["closedById"] = Convert.ToInt64(r["closed_by_id"]).ToString();
+        if (r["expected_cash_h"] is not null) doc["expectedClosingH"] = Convert.ToInt64(r["expected_cash_h"]);
+        if (r["actual_closing_h"] is not null) doc["actualClosingH"] = Convert.ToInt64(r["actual_closing_h"]);
+        if (r["discrepancy_h"] is not null) doc["differenceH"] = Convert.ToInt64(r["discrepancy_h"]);
+        if (r["discrepancy_reason"] is string dr) doc["discrepancyReason"] = dr;
+        if (r["closing_notes"] is string cn) doc["closingNotes"] = cn;
+        if (details?["summary"] is JsonNode summary) doc["summary"] = summary.DeepClone();
+        return doc;
+    }
+
+    private static JsonObject MovementDoc(IDictionary<string, object?> r) => new()
+    {
+        ["id"] = Convert.ToInt64(r["movement_id"]).ToString(), ["sessionId"] = Convert.ToInt64(r["session_id"]).ToString(), ["type"] = (string)r["movement_type"]!,
+        ["amountH"] = Convert.ToInt64(r["amount_h"]), ["description"] = (string)r["description"]!,
+        ["createdBy"] = (string)r["user_name"]!, ["createdAt"] = Iso(r["created_at_utc"]),
+    };
+
+    private static JsonObject AuditDoc(IDictionary<string, object?> r)
+    {
+        var doc = new JsonObject
+        {
+            ["id"] = Convert.ToInt64(r["session_audit_id"]).ToString(), ["sessionId"] = Convert.ToInt64(r["session_id"]).ToString(), ["action"] = (string)r["action"]!,
+            ["description"] = (string)r["description"]!, ["userName"] = (string)r["user_name"]!, ["at"] = Iso(r["created_at_utc"]),
+        };
+        if (r["old_value"] is string o) doc["previousValue"] = o;
+        if (r["new_value"] is string n) doc["newValue"] = n;
+        return doc;
+    }
 
     private static IResult NotFound() =>
-        Results.Json(ApiError.Create("SESSION_NOT_FOUND", "That session does not exist.", "هذه الجلسة غير موجودة."), statusCode: 404);
+        Results.Json(ApiError.Create("not_found", "That business day was not found.", "لم يتم العثور على يوم العمل."), statusCode: 404);
 
-    private static IResult Fail(SqlException ex)
+    private static IResult Error(int status, string code, string en, string ar) =>
+        Results.Json(ApiError.Create(code, en, ar), statusCode: status);
+
+    private sealed class ConflictException(JsonObject session) : Exception("conflict")
     {
-        var (status, code, en, ar) = ex.Number switch
-        {
-            52090 => (409, "RESTAURANT_CLOSED", "Restaurant is currently closed. Open a business session before creating orders.", "المطعم مغلق حاليًا. افتح جلسة عمل قبل إنشاء الطلبات."),
-            56000 => (422, "INVALID_OPENING_BALANCE", "Opening cash must be zero or more.", "يجب أن يكون النقد الافتتاحي صفرًا أو أكثر."),
-            56001 or 2601 => (409, "SESSION_ALREADY_OPEN", "This restaurant already has an open business session.", "يوجد لهذا المطعم جلسة عمل مفتوحة بالفعل."),
-            56002 => (422, "OPENED_IN_FUTURE", "Opening time cannot be in the future.", "لا يمكن أن يكون وقت الفتح في المستقبل."),
-            56003 => (422, "OVERLAPS_PREVIOUS", "Opening time must be after the previous session closed.", "يجب أن يكون وقت الفتح بعد إغلاق الجلسة السابقة."),
-            56010 => (422, "INVALID_AMOUNT", "Enter an amount greater than zero.", "أدخل مبلغًا أكبر من صفر."),
-            56011 => (422, "DESCRIPTION_REQUIRED", "Say what the cash was for.", "اذكر الغرض من هذا النقد."),
-            56012 => (409, "SESSION_CLOSED", "This session is closed.", "هذه الجلسة مغلقة."),
-            56013 => (422, "INSUFFICIENT_CASH", "There is not that much cash expected in the drawer.", "لا يوجد هذا المبلغ في الدرج."),
-            56020 => (422, "INVALID_ACTUAL_CASH", "Enter the cash you counted (zero or more).", "أدخل النقد المعدود (صفر أو أكثر)."),
-            56021 => (404, "SESSION_NOT_FOUND", "That session does not exist.", "هذه الجلسة غير موجودة."),
-            56022 => (409, "SESSION_ALREADY_CLOSED", "This session was already closed.", "أُغلقت هذه الجلسة بالفعل."),
-            56023 => (409, "PENDING_ORDERS", "Orders are still in the kitchen.", "ما زالت هناك طلبات في المطبخ."),
-            56024 => (422, "OVERRIDE_REASON_REQUIRED", "Give a reason for closing with orders still open.", "اذكر سبب الإغلاق مع وجود طلبات مفتوحة."),
-            56025 => (422, "DISCREPANCY_REASON_REQUIRED", "Explain the cash difference before closing.", "اشرح فرق النقد قبل الإغلاق."),
-            56026 => (403, "APPROVAL_REQUIRED", "A manager must approve this difference.", "يجب أن يعتمد المدير هذا الفرق."),
-            56030 => (422, "REASON_REQUIRED", "Say why the session is being reopened.", "اذكر سبب إعادة فتح الجلسة."),
-            56031 => (409, "SESSION_NOT_CLOSED", "Only a closed session can be reopened.", "يمكن إعادة فتح الجلسة المغلقة فقط."),
-            56032 => (409, "NOT_LATEST", "Only the most recent session can be reopened.", "يمكن إعادة فتح أحدث جلسة فقط."),
-            _ => (422, "SESSION_RULE", ex.Message, ex.Message),
-        };
-        /* The spec's order-guard shape, alongside the bilingual payload. */
-        return Results.Json(new { success = false, error = code, message = en, messageAr = ar }, statusCode: status);
+        public JsonObject Session { get; } = session;
     }
 }

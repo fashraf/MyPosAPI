@@ -54,7 +54,9 @@ public sealed class JwtTokenService : IJwtTokenService
             new(JwtRegisteredClaimNames.UniqueName, username),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
             new(ClaimTypes.Role, roleId),
-            new("role", roleId)
+            new("role", roleId),
+            /* SaaS mode: which client this token is for (checked on every request). */
+            new(PosApi.Tenancy.TenantTokenGuardMiddleware.Claim, PosApi.Tenancy.TenantContext.Key),
         };
 
         // Permissions ride in the token so an authorization check is a claim

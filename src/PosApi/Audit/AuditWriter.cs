@@ -39,26 +39,30 @@ public sealed class AuditWriter : IAuditWriter
 
     internal ChannelReader<object> Reader => _queue.Reader;
 
+    /// <summary>A queued row and the client (SaaS mode) whose database it belongs in.</summary>
+    internal sealed record Queued(object Item, PosApi.Tenancy.TenantInfo? Tenant, bool Admin);
+
     public void Record(AuditEntry entry)
     {
-        if (!_queue.Writer.TryWrite(entry))
+        if (!_queue.Writer.TryWrite(new Queued(entry, PosApi.Tenancy.TenantContext.Current, PosApi.Tenancy.TenantContext.Admin)))
         {
             _logger.LogWarning("Audit queue is full; an entry was dropped.");
         }
     }
 
-    public void RecordTiming(RequestTiming timing) => _queue.Writer.TryWrite(timing);
+    public void RecordTiming(RequestTiming timing) =>
+        _queue.Writer.TryWrite(new Queued(timing, PosApi.Tenancy.TenantContext.Current, PosApi.Tenancy.TenantContext.Admin));
 }
 
 /// <summary>Drains the queue into SQL Server.</summary>
 public sealed class AuditDrainService : BackgroundService
 {
     private readonly AuditWriter _writer;
-    private readonly ISqlConnectionFactory _db;
+    private readonly PosApi.Data.IDb _db;
     private readonly ILogger<AuditDrainService> _logger;
 
     public AuditDrainService(
-        IAuditWriter writer, ISqlConnectionFactory db, ILogger<AuditDrainService> logger)
+        IAuditWriter writer, PosApi.Data.IDb db, ILogger<AuditDrainService> logger)
     {
         _writer = (AuditWriter)writer;
         _db = db;
@@ -67,29 +71,33 @@ public sealed class AuditDrainService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var item in _writer.Reader.ReadAllAsync(stoppingToken))
+        await foreach (var queued in _writer.Reader.ReadAllAsync(stoppingToken))
         {
+            /* Write into the database of the client the request belonged to. Super admin requests have no client database. */
+            var wrapped = (AuditWriter.Queued)queued;
+            if (wrapped.Admin) continue;
+            var item = wrapped.Item;
+            PosApi.Tenancy.TenantContext.Current = wrapped.Tenant;
             try
             {
-                await using var connection = _db.Create();
+                await using var connection = await _db.OpenAsync(stoppingToken);
 
                 if (item is AuditEntry entry)
                 {
                     var auditId = await connection.ExecuteScalarAsync<long>(
+                        _db.Provider.Dialect.InsertReturningId(
                         """
-                        INSERT INTO audit.AuditEntry
-                            (UserId, Username, RoleId, Action, Module, EntityType, EntityId,
-                             ApiPath, HttpMethod, CurrentPage, PreviousPage, BranchId,
-                             OldValue, NewValue, Details, Result, StatusCode, ErrorMessage,
-                             IpAddress, UserAgent, CorrelationId)
+                        INSERT INTO audit.audit_entry
+                            (user_id, username, role_id, action, module, entity_type, entity_id,
+                             api_path, http_method, current_page, previous_page, branch_id,
+                             old_value, new_value, details, result, status_code, error_message,
+                             ip_address, user_agent, correlation_id, occurred_at_utc)
                         VALUES
                             (@UserId, @Username, @RoleId, @Action, @Module, @EntityType, @EntityId,
                              @ApiPath, @HttpMethod, @CurrentPage, @PreviousPage, @BranchId,
                              @OldValue, @NewValue, @Details, @Result, @StatusCode, @ErrorMessage,
-                             @IpAddress, @UserAgent, @CorrelationId);
-
-                        SELECT CAST(SCOPE_IDENTITY() AS BIGINT);
-                        """, entry);
+                             @IpAddress, @UserAgent, @CorrelationId, CURRENT_TIMESTAMP)
+                        """, "audit_id"), entry);
 
                     /* SCOPE_IDENTITY, so these attach to this entry rather than
                        whatever anyone else inserted most recently. */
@@ -97,14 +105,14 @@ public sealed class AuditDrainService : BackgroundService
                     {
                         await connection.ExecuteAsync(
                             """
-                            INSERT INTO audit.AuditChange
-                                (AuditId, SchemaName, TableName, Operation, PrimaryKey,
-                                 ForeignKey, ForeignTable, ColumnName, OldValue,
-                                 NewValue, RowsAffected)
+                            INSERT INTO audit.audit_change
+                                (audit_id, schema_name, table_name, operation, primary_key,
+                                 foreign_key, foreign_table, column_name, old_value,
+                                 new_value, rows_affected)
                             VALUES
                                 (@AuditId, @SchemaName, @TableName, @Operation, @PrimaryKey,
                                  @ForeignKey, @ForeignTable, @ColumnName, @OldValue,
-                                 @NewValue, @RowsAffected);
+                                 @NewValue, @RowsAffected)
                             """,
                             new
                             {
@@ -120,15 +128,25 @@ public sealed class AuditDrainService : BackgroundService
                 {
                     await connection.ExecuteAsync(
                         """
-                        INSERT INTO audit.RequestTiming
-                            (CorrelationId, UserId, Username, ApiPath, HttpMethod,
-                             CurrentPage, PreviousPage, TotalMs, DatabaseMs, QueryCount,
-                             StatusCode, Succeeded, ErrorMessage, ResponseBytes)
+                        INSERT INTO audit.request_timing
+                            (correlation_id, user_id, username, api_path, http_method,
+                             current_page, previous_page, total_ms, database_ms, query_count,
+                             status_code, succeeded, error_message, response_bytes)
                         VALUES
                             (@CorrelationId, @UserId, @Username, @ApiPath, @HttpMethod,
                              @CurrentPage, @PreviousPage, @TotalMs, @DatabaseMs, @QueryCount,
-                             @StatusCode, @Succeeded, @ErrorMessage, @ResponseBytes);
+                             @StatusCode, @Succeeded, @ErrorMessage, @ResponseBytes)
                         """, timing);
+                    foreach (var q in timing.Queries)
+                    {
+                        await connection.ExecuteAsync(
+                            """
+                            INSERT INTO audit.query_timing
+                                (correlation_id, seq, command_text, parameter_names, duration_ms, rows_affected, occurred_at_utc)
+                            VALUES (@CorrelationId, @Seq, @CommandText, @ParameterNames, @DurationMs, @RowsAffected, @AtUtc)
+                            """,
+                            new { timing.CorrelationId, q.Seq, q.CommandText, q.ParameterNames, DurationMs = (decimal)q.DurationMs, q.RowsAffected, q.AtUtc });
+                    }
                 }
             }
             catch (Exception ex)

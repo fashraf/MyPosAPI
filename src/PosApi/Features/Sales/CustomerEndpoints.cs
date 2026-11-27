@@ -236,7 +236,7 @@ public static class CustomerEndpoints
         }
         catch (SqlException ex) when (ex.Number >= 52000 && ex.Number < 53000)
         {
-            return Results.Json(SalesEndpoints.Translate(ex.Number, ex.Message),
+            return Results.Json(LegacySqlErrors.Translate(ex.Number, ex.Message),
                 statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 

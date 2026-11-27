@@ -1,0 +1,45 @@
+name: Move to a new server
+# Copies an environment (database + current versions) from the server in DEPLOY_HOST_<ENV> to new_host,
+# then you change the DEPLOY_HOST_<ENV> repository secret to the new IP. The old server keeps running until you switch.
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [staging, production], default: staging }
+      new_host: { description: "New server IP (same SSH key must be authorised on it)", required: true }
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move ${{ inputs.environment }} to ${{ inputs.new_host }}
+        run: |
+          set -euo pipefail
+          e=${{ inputs.environment }}
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keygen -y -P '' -f ~/.ssh/id > /dev/null 2>&1 || { echo "::error::DEPLOY_SSH_KEY is not a usable private key. Paste the whole PRIVATE key (from -----BEGIN OPENSSH PRIVATE KEY----- to -----END OPENSSH PRIVATE KEY-----), not the .pub file, a PuTTY .ppk, or a key with a passphrase."; exit 1; }
+          opts="-i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new -p ${{ secrets.DEPLOY_PORT || '22' }}"
+          OLD="ssh $opts ${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }}"
+          NEW="ssh $opts ${{ secrets.DEPLOY_USER || 'root' }}@${{ inputs.new_host }}"
+          echo "1/5 Fresh backup on the old server"
+          $OLD "/opt/mypos/bin/backup.sh $e move"
+          bak=$($OLD "ls -1t /opt/mypos/$e/backups/*.bak | head -1 | xargs -n1 basename")
+          echo "2/5 Set up the new server"
+          tar -C deploy -czf - . | $NEW "mkdir -p /opt/mypos/kit /opt/mypos/bin && tar -C /opt/mypos/kit -xzf - && install -m 755 /opt/mypos/kit/bin/*.sh /opt/mypos/bin/ && apt-get update -qq && apt-get install -y -qq curl >/dev/null"
+          echo "3/5 Copy settings (same passwords and versions) and the backup"
+          $OLD "cat /opt/mypos/$e/.env" | $NEW "mkdir -p /opt/mypos/$e/backups && cat > /opt/mypos/$e/.env && chmod 600 /opt/mypos/$e/.env"
+          port=$($OLD "grep ^WEB_PORT= /opt/mypos/$e/.env | cut -d= -f2")
+          $NEW "/opt/mypos/bin/setup.sh $e $port && cp /opt/mypos/kit/compose.yml /opt/mypos/$e/compose.yml"
+          ip="${{ inputs.new_host }}"; url="http://$ip"; [[ "$port" != 80 ]] && url="$url:$port"
+          $NEW "sed -i 's|^PUBLIC_URL=.*|PUBLIC_URL=$url|' /opt/mypos/$e/.env"
+          $OLD "cat /opt/mypos/$e/backups/$bak" | $NEW "cat > /opt/mypos/$e/backups/$bak && chown 10001:0 /opt/mypos/$e/backups/$bak"
+          $OLD "cat /opt/mypos/$e/releases.log" | $NEW "cat > /opt/mypos/$e/releases.log"
+          echo "4/5 Start and restore"
+          echo "${{ secrets.MYPOS_BOT_TOKEN }}" | $NEW "docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin" >/dev/null
+          $NEW "cd /opt/mypos/$e && docker compose --env-file .env pull && docker compose --env-file .env up -d"
+          $NEW "/opt/mypos/bin/restore.sh $e $bak"
+          echo "5/5 Done"
+          {
+            echo "### ✅ $e is running on $ip (restored from $bak)"
+            echo "Open $url and check it. Then set the repository secret **DEPLOY_HOST_${e^^}** = $ip (in both repos)."
+            echo "Until you do, deploys still go to the old server."
+          } >> "$GITHUB_STEP_SUMMARY"

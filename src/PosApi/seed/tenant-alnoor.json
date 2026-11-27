@@ -1,0 +1,2236 @@
+{
+ "tenant": "ten_alnoor",
+ "branches": [
+  {
+   "id": "1",
+   "nameAr": "فرع العليا الرئيسي — الرياض",
+   "nameEn": "Riyadh Flagship — Olaya",
+   "code": "RUH-OLY",
+   "city": "Riyadh",
+   "phone": "+966 11 465 2200",
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  }
+ ],
+ "categories": [
+  {
+   "id": "1",
+   "nameAr": "قهوة ساخنة",
+   "nameEn": "Hot Coffee",
+   "appliesTo": "product",
+   "sortOrder": 1,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "2",
+   "nameAr": "قهوة باردة",
+   "nameEn": "Iced & Cold Brew",
+   "appliesTo": "product",
+   "sortOrder": 2,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "3",
+   "nameAr": "شاي ومشروبات",
+   "nameEn": "Tea & Others",
+   "appliesTo": "product",
+   "sortOrder": 3,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "4",
+   "nameAr": "مخبوزات",
+   "nameEn": "Bakery",
+   "appliesTo": "product",
+   "sortOrder": 4,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "5",
+   "nameAr": "حلويات",
+   "nameEn": "Desserts",
+   "appliesTo": "product",
+   "sortOrder": 5,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "6",
+   "nameAr": "بن للبيع",
+   "nameEn": "Retail Beans",
+   "appliesTo": "product",
+   "sortOrder": 6,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "7",
+   "nameAr": "مشروبات معبأة",
+   "nameEn": "Bottled Drinks",
+   "appliesTo": "product",
+   "sortOrder": 7,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "8",
+   "nameAr": "ورش وتجارب",
+   "nameEn": "Workshops",
+   "appliesTo": "service",
+   "sortOrder": 8,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "9",
+   "nameAr": "عروض الكومبو",
+   "nameEn": "Combos",
+   "appliesTo": "product",
+   "sortOrder": 0,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  }
+ ],
+ "printGroups": [
+  {
+   "id": "1",
+   "nameAr": "البار",
+   "nameEn": "Espresso Bar",
+   "ticketTitle": "BAR",
+   "sortOrder": 1,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "2",
+   "nameAr": "المطبخ",
+   "nameEn": "Pastry Kitchen",
+   "ticketTitle": "KITCHEN",
+   "sortOrder": 2,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "id": "3",
+   "nameAr": "التغليف",
+   "nameEn": "Packing",
+   "ticketTitle": "PACKING",
+   "sortOrder": 3,
+   "status": "active",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  }
+ ],
+ "catalog": [
+  {
+   "id": "1",
+   "kind": "product",
+   "nameAr": "إسبريسو",
+   "nameEn": "Espresso",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1200,
+   "costH": 310,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-ESP",
+   "barcode": "6287001000011",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "2",
+   "kind": "product",
+   "nameAr": "أمريكانو",
+   "nameEn": "Americano",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1400,
+   "costH": 340,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-AMR",
+   "barcode": "6287001000028",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "3",
+   "kind": "product",
+   "nameAr": "كابتشينو",
+   "nameEn": "Cappuccino",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1800,
+   "costH": 460,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-CAP",
+   "barcode": "6287001000035",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "4",
+   "kind": "product",
+   "nameAr": "فلات وايت",
+   "nameEn": "Flat White",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1900,
+   "costH": 490,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-FLW",
+   "barcode": "6287001000042",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "5",
+   "kind": "product",
+   "nameAr": "سبانش لاتيه",
+   "nameEn": "Spanish Latte",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2100,
+   "costH": 560,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-SPL",
+   "barcode": "6287001000059",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "6",
+   "kind": "product",
+   "nameAr": "قهوة سعودية — دلة",
+   "nameEn": "Saudi Coffee — Dallah",
+   "categoryId": "1",
+   "description": "Khawlani beans with cardamom and saffron, served with dates.",
+   "imageUrl": null,
+   "priceH": 2500,
+   "costH": 600,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-DAL",
+   "barcode": "6287001000066",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_sugar",
+     "nameAr": "السكر",
+     "nameEn": "Sugar",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_nosugar",
+       "nameAr": "بدون سكر",
+       "nameEn": "No sugar",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_medsugar",
+       "nameAr": "سكر وسط",
+       "nameEn": "Medium sugar",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_sweet",
+       "nameAr": "سكر زيادة",
+       "nameEn": "Extra sweet",
+       "priceDeltaH": 0
+      }
+     ]
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "7",
+   "kind": "product",
+   "nameAr": "في ٦٠ — قهوة مقطرة",
+   "nameEn": "V60 Pour-over",
+   "categoryId": "1",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2400,
+   "costH": 680,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "HOT-V60",
+   "barcode": "6287001000073",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "8",
+   "kind": "product",
+   "nameAr": "آيس لاتيه",
+   "nameEn": "Iced Latte",
+   "categoryId": "2",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2000,
+   "costH": 500,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "CLD-ILT",
+   "barcode": "6287001000080",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "9",
+   "kind": "product",
+   "nameAr": "كولد برو",
+   "nameEn": "Cold Brew",
+   "categoryId": "2",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2200,
+   "costH": 540,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "CLD-CBR",
+   "barcode": "6287001000097",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "10",
+   "kind": "product",
+   "nameAr": "آيس سبانش لاتيه",
+   "nameEn": "Iced Spanish Latte",
+   "categoryId": "2",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2300,
+   "costH": 590,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "CLD-ISP",
+   "barcode": "6287001000103",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    },
+    {
+     "id": "mg_extra",
+     "nameAr": "إضافات",
+     "nameEn": "Extras",
+     "required": false,
+     "multiple": true,
+     "options": [
+      {
+       "id": "mo_shot",
+       "nameAr": "إضافة بن إسبريسو",
+       "nameEn": "Extra espresso beans",
+       "priceDeltaH": 400,
+       "ingredientId": "ing_beans",
+       "quantity": 18
+      },
+      {
+       "id": "mo_vanilla",
+       "nameAr": "إضافة سيروب فانيلا",
+       "nameEn": "Extra vanilla syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_vanilla",
+       "quantity": 15
+      },
+      {
+       "id": "mo_caramel",
+       "nameAr": "إضافة سيروب كراميل",
+       "nameEn": "Extra caramel syrup",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_caramel",
+       "quantity": 15
+      },
+      {
+       "id": "mo_decaf",
+       "nameAr": "بن منزوع الكافيين",
+       "nameEn": "Decaf beans",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_decaf",
+       "replacesIngredientId": "ing_beans"
+      }
+     ],
+     "kind": "extra"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "11",
+   "kind": "product",
+   "nameAr": "ماتشا لاتيه",
+   "nameEn": "Matcha Latte",
+   "categoryId": "3",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2200,
+   "costH": 620,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "TEA-MTC",
+   "barcode": "6287001000110",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_size",
+     "nameAr": "الحجم",
+     "nameEn": "Size",
+     "required": true,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_s",
+       "nameAr": "صغير",
+       "nameEn": "Small",
+       "priceDeltaH": 0,
+       "scale": 1
+      },
+      {
+       "id": "mo_m",
+       "nameAr": "وسط",
+       "nameEn": "Medium",
+       "priceDeltaH": 300,
+       "scale": 1.25
+      },
+      {
+       "id": "mo_l",
+       "nameAr": "كبير",
+       "nameEn": "Large",
+       "priceDeltaH": 600,
+       "scale": 1.5
+      }
+     ],
+     "kind": "size"
+    },
+    {
+     "id": "mg_milk",
+     "nameAr": "نوع الحليب",
+     "nameEn": "Milk",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_full",
+       "nameAr": "حليب كامل الدسم",
+       "nameEn": "Full cream milk",
+       "priceDeltaH": 0,
+       "ingredientId": "ing_milk",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_oat",
+       "nameAr": "حليب الشوفان",
+       "nameEn": "Oat milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_oat",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_almond",
+       "nameAr": "حليب اللوز",
+       "nameEn": "Almond milk",
+       "priceDeltaH": 300,
+       "ingredientId": "ing_almond",
+       "replacesIngredientId": "ing_milk"
+      },
+      {
+       "id": "mo_lactose",
+       "nameAr": "حليب خالي من اللاكتوز",
+       "nameEn": "Lactose-free milk",
+       "priceDeltaH": 200,
+       "ingredientId": "ing_lactose",
+       "replacesIngredientId": "ing_milk"
+      }
+     ],
+     "kind": "choice"
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "12",
+   "kind": "product",
+   "nameAr": "شاي كرك",
+   "nameEn": "Karak Tea",
+   "categoryId": "3",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 900,
+   "costH": 180,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "1",
+   "status": "active",
+   "sku": "TEA-KRK",
+   "barcode": "6287001000127",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "modifierGroups": [
+    {
+     "id": "mg_sugar",
+     "nameAr": "السكر",
+     "nameEn": "Sugar",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_nosugar",
+       "nameAr": "بدون سكر",
+       "nameEn": "No sugar",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_medsugar",
+       "nameAr": "سكر وسط",
+       "nameEn": "Medium sugar",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_sweet",
+       "nameAr": "سكر زيادة",
+       "nameEn": "Extra sweet",
+       "priceDeltaH": 0
+      }
+     ]
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "13",
+   "kind": "product",
+   "nameAr": "كرواسون بالزبدة",
+   "nameEn": "Butter Croissant",
+   "categoryId": "4",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1200,
+   "costH": 420,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "2",
+   "status": "active",
+   "sku": "BAK-CRO",
+   "barcode": "6287001000134",
+   "vendorId": "ven_003",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 60,
+   "minStockLevel": 15,
+   "modifierGroups": [
+    {
+     "id": "mg_warm",
+     "nameAr": "التقديم",
+     "nameEn": "Serve",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_warm",
+       "nameAr": "دافئ",
+       "nameEn": "Warmed",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_asis",
+       "nameAr": "كما هو",
+       "nameEn": "As is",
+       "priceDeltaH": 0
+      }
+     ]
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "14",
+   "kind": "product",
+   "nameAr": "كرواسون زعتر",
+   "nameEn": "Zaatar Croissant",
+   "categoryId": "4",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1300,
+   "costH": 450,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "2",
+   "status": "active",
+   "sku": "BAK-ZTR",
+   "barcode": "6287001000141",
+   "vendorId": "ven_003",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 40,
+   "minStockLevel": 12,
+   "modifierGroups": [
+    {
+     "id": "mg_warm",
+     "nameAr": "التقديم",
+     "nameEn": "Serve",
+     "required": false,
+     "multiple": false,
+     "options": [
+      {
+       "id": "mo_warm",
+       "nameAr": "دافئ",
+       "nameEn": "Warmed",
+       "priceDeltaH": 0
+      },
+      {
+       "id": "mo_asis",
+       "nameAr": "كما هو",
+       "nameEn": "As is",
+       "priceDeltaH": 0
+      }
+     ]
+    }
+   ],
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "15",
+   "kind": "product",
+   "nameAr": "كوكيز شوكولاتة",
+   "nameEn": "Chocolate Chip Cookie",
+   "categoryId": "4",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 900,
+   "costH": 260,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BAK-CKE",
+   "barcode": "6287001000158",
+   "vendorId": "ven_003",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 8,
+   "minStockLevel": 20,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "16",
+   "kind": "product",
+   "nameAr": "كيكة التمر",
+   "nameEn": "Date Cake",
+   "categoryId": "5",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 1800,
+   "costH": 550,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "2",
+   "status": "active",
+   "sku": "DST-DTC",
+   "barcode": "6287001000165",
+   "vendorId": "ven_003",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 24,
+   "minStockLevel": 8,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "17",
+   "kind": "product",
+   "nameAr": "سان سباستيان تشيزكيك",
+   "nameEn": "San Sebastián Cheesecake",
+   "categoryId": "5",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 2600,
+   "costH": 840,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": "2",
+   "status": "active",
+   "sku": "DST-SSC",
+   "barcode": "6287001000172",
+   "vendorId": "ven_003",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 0,
+   "minStockLevel": 6,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "18",
+   "kind": "product",
+   "nameAr": "بن إثيوبي يرغاتشيفي ٢٥٠ج",
+   "nameEn": "Ethiopia Yirgacheffe 250g",
+   "categoryId": "6",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 8500,
+   "costH": 3800,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BNS-ETH-250",
+   "barcode": "6287001000189",
+   "vendorId": "ven_001",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 34,
+   "minStockLevel": 10,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "19",
+   "kind": "product",
+   "nameAr": "بن كولومبي ٢٥٠ج",
+   "nameEn": "Colombia Huila 250g",
+   "categoryId": "6",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 7800,
+   "costH": 3400,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BNS-COL-250",
+   "barcode": "6287001000196",
+   "vendorId": "ven_001",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 22,
+   "minStockLevel": 10,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "20",
+   "kind": "product",
+   "nameAr": "بن خولاني سعودي ٢٥٠ج",
+   "nameEn": "Saudi Khawlani 250g",
+   "categoryId": "6",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 9500,
+   "costH": 4600,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BNS-KHW-250",
+   "barcode": "6287001000202",
+   "vendorId": "ven_001",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 6,
+   "minStockLevel": 8,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "21",
+   "kind": "product",
+   "nameAr": "مياه معدنية ٣٣٠ مل",
+   "nameEn": "Mineral Water 330ml",
+   "categoryId": "7",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 300,
+   "costH": 90,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BEV-WTR-330",
+   "barcode": "6281007012342",
+   "vendorId": "ven_002",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 240,
+   "minStockLevel": 48,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "22",
+   "kind": "product",
+   "nameAr": "مياه غازية ٢٥٠ مل",
+   "nameEn": "Sparkling Water 250ml",
+   "categoryId": "7",
+   "description": "",
+   "imageUrl": null,
+   "priceH": 700,
+   "costH": 240,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "BEV-SPK-250",
+   "barcode": "6281007012359",
+   "vendorId": "ven_002",
+   "unit": "piece",
+   "trackInventory": true,
+   "stockQuantity": 36,
+   "minStockLevel": 24,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "23",
+   "kind": "service",
+   "nameAr": "ورشة تحضير القهوة المقطرة",
+   "nameEn": "Home Brewing Workshop",
+   "categoryId": "8",
+   "description": "Two hours, V60 and Chemex, beans included.",
+   "imageUrl": null,
+   "priceH": 25000,
+   "costH": 6000,
+   "showOnPos": true,
+   "requiresPreparation": false,
+   "printGroupId": null,
+   "status": "active",
+   "durationMinutes": 120,
+   "providerId": "stf_003",
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "recipe": []
+  },
+  {
+   "id": "24",
+   "kind": "product",
+   "nameAr": "كومبو الفطور",
+   "nameEn": "Breakfast Combo",
+   "categoryId": "9",
+   "description": "A pastry, a coffee and water — before 11am.",
+   "imageUrl": null,
+   "priceH": 2600,
+   "costH": 0,
+   "showOnPos": true,
+   "requiresPreparation": true,
+   "printGroupId": null,
+   "status": "active",
+   "sku": "CMB-BRKF",
+   "barcode": "",
+   "vendorId": null,
+   "unit": "piece",
+   "trackInventory": false,
+   "stockQuantity": 0,
+   "minStockLevel": 0,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z",
+   "combo": {
+    "slots": [
+     {
+      "id": "sl_pastry",
+      "nameAr": "المخبوز",
+      "nameEn": "Pastry",
+      "quantity": 1,
+      "defaultItemId": "13",
+      "choices": [
+       {
+        "itemId": "14",
+        "priceDeltaH": 100
+       },
+       {
+        "itemId": "15",
+        "priceDeltaH": 0
+       }
+      ]
+     },
+     {
+      "id": "sl_coffee",
+      "nameAr": "القهوة",
+      "nameEn": "Coffee",
+      "quantity": 1,
+      "defaultItemId": "2",
+      "choices": [
+       {
+        "itemId": "3",
+        "priceDeltaH": 300
+       },
+       {
+        "itemId": "4",
+        "priceDeltaH": 400
+       },
+       {
+        "itemId": "5",
+        "priceDeltaH": 500
+       },
+       {
+        "itemId": "12",
+        "priceDeltaH": 0
+       }
+      ]
+     },
+     {
+      "id": "sl_water",
+      "nameAr": "المياه",
+      "nameEn": "Water",
+      "quantity": 1,
+      "defaultItemId": "21",
+      "choices": [
+       {
+        "itemId": "22",
+        "priceDeltaH": 300
+       }
+      ]
+     }
+    ]
+   },
+   "recipe": []
+  }
+ ],
+ "users": [
+  {
+   "nationality": "SA",
+   "jobTitle": "Owner",
+   "joinedAt": "2018-12-17",
+   "documents": [
+    {
+     "kind": "national_id",
+     "number": "1023456789",
+     "expiresAt": "2030-09-25"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "1",
+   "firstName": "Faisal",
+   "lastName": "Al-Rashid",
+   "nameAr": "فيصل الراشد",
+   "nameEn": "Faisal Al-Rashid",
+   "username": "faisal",
+   "email": "owner@alnoor.sa",
+   "phone": "+966 50 111 2001",
+   "address": "",
+   "employeeId": "10001",
+   "avatarUrl": null,
+   "roleId": "rol_owner",
+   "defaultBranchId": "1",
+   "branchIds": [
+    "1"
+   ],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "SA",
+   "jobTitle": "Branch manager",
+   "joinedAt": "2022-10-17",
+   "documents": [
+    {
+     "kind": "national_id",
+     "number": "1098765432",
+     "expiresAt": "2029-02-22"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "2",
+   "firstName": "Noura",
+   "lastName": "Al-Qahtani",
+   "nameAr": "نورة القحطاني",
+   "nameEn": "Noura Al-Qahtani",
+   "username": "noura",
+   "email": "manager@alnoor.sa",
+   "phone": "+966 55 111 2002",
+   "address": "",
+   "employeeId": "10002",
+   "avatarUrl": null,
+   "roleId": "rol_manager",
+   "defaultBranchId": "1",
+   "branchIds": [
+    "1"
+   ],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "SA",
+   "jobTitle": "Senior cashier",
+   "joinedAt": "2024-12-25",
+   "documents": [
+    {
+     "kind": "national_id",
+     "number": "1045678123",
+     "expiresAt": "2026-12-20"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "3",
+   "firstName": "Yousef",
+   "lastName": "Al-Harbi",
+   "nameAr": "يوسف الحربي",
+   "nameEn": "Yousef Al-Harbi",
+   "username": "yousef",
+   "email": "cashier@alnoor.sa",
+   "phone": "+966 53 111 2003",
+   "address": "",
+   "employeeId": "10003",
+   "avatarUrl": null,
+   "roleId": "rol_cashier",
+   "defaultBranchId": "1",
+   "branchIds": [
+    "1"
+   ],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "EG",
+   "jobTitle": "Head barista",
+   "joinedAt": "2023-11-21",
+   "documents": [
+    {
+     "kind": "iqama",
+     "number": "2345678901",
+     "expiresAt": "2027-01-11"
+    },
+    {
+     "kind": "passport",
+     "number": "A24418865",
+     "expiresAt": "2029-05-13"
+    },
+    {
+     "kind": "health_card",
+     "number": "HC-77120",
+     "expiresAt": "2026-11-19"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "4",
+   "firstName": "Omar",
+   "lastName": "Bakri",
+   "nameAr": "عمر بكري",
+   "nameEn": "Omar Bakri",
+   "username": "omar",
+   "email": "kitchen@alnoor.sa",
+   "phone": "+966 56 111 2004",
+   "address": "",
+   "employeeId": "10004",
+   "avatarUrl": null,
+   "roleId": "rol_kitchen",
+   "defaultBranchId": "1",
+   "branchIds": [
+    "1"
+   ],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "JO",
+   "jobTitle": "Accountant",
+   "joinedAt": "2023-05-05",
+   "documents": [
+    {
+     "kind": "iqama",
+     "number": "2412098733",
+     "expiresAt": "2027-10-01"
+    },
+    {
+     "kind": "passport",
+     "number": "N9023311",
+     "expiresAt": "2031-01-03"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "5",
+   "firstName": "Huda",
+   "lastName": "Al-Shammari",
+   "nameAr": "هدى الشمري",
+   "nameEn": "Huda Al-Shammari",
+   "username": "huda",
+   "email": "accountant@alnoor.sa",
+   "phone": "+966 54 111 2005",
+   "address": "",
+   "employeeId": "10005",
+   "avatarUrl": null,
+   "roleId": "rol_accountant",
+   "defaultBranchId": "1",
+   "branchIds": [
+    "1"
+   ],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "SA",
+   "jobTitle": "Cashier",
+   "joinedAt": "2026-01-29",
+   "documents": [
+    {
+     "kind": "national_id",
+     "number": "1112223334",
+     "expiresAt": "2032-02-07"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "6",
+   "firstName": "Reem",
+   "lastName": "Al-Ghamdi",
+   "nameAr": "ريم الغامدي",
+   "nameEn": "Reem Al-Ghamdi",
+   "username": "reem",
+   "email": "reem@alnoor.sa",
+   "phone": "+966 53 111 2006",
+   "address": "",
+   "employeeId": "10006",
+   "avatarUrl": null,
+   "roleId": "rol_cashier",
+   "defaultBranchId": "1",
+   "branchIds": [],
+   "status": "active",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-11-15T07:15:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+   "nationality": "PH",
+   "jobTitle": "Cashier",
+   "joinedAt": "2024-06-08",
+   "documents": [
+    {
+     "kind": "iqama",
+     "number": "2501234567",
+     "expiresAt": "2026-10-16"
+    },
+    {
+     "kind": "passport",
+     "number": "P5512090A",
+     "expiresAt": "2027-12-30"
+    }
+   ],
+   "mustChangePassword": false,
+   "passwordChangedAt": "2026-09-01T08:00:00.000Z",
+   "id": "7",
+   "firstName": "Majed",
+   "lastName": "Al-Zahrani",
+   "nameAr": "ماجد الزهراني",
+   "nameEn": "Majed Al-Zahrani",
+   "username": "majed",
+   "email": "majed@alnoor.sa",
+   "phone": "+966 53 111 2007",
+   "address": "",
+   "employeeId": "10007",
+   "avatarUrl": null,
+   "roleId": "rol_cashier",
+   "defaultBranchId": "1",
+   "branchIds": [],
+   "status": "suspended",
+   "extraPermissions": [],
+   "deniedPermissions": [],
+   "lastActiveAt": "2026-10-02T11:20:00.000Z",
+   "accessExpiresAt": null,
+   "ticketReference": null,
+   "createdAt": "2026-08-20T09:00:00.000Z",
+   "updatedAt": "2026-08-20T09:00:00.000Z"
+  }
+ ],
+ "roles": [
+  {
+   "id": "rol_owner",
+   "nameAr": "المالك",
+   "nameEn": "Tenant Owner",
+   "permissions": [
+    "dashboard.view",
+    "pos.view",
+    "pos.create_sale",
+    "pos.apply_discount",
+    "pos.override_price",
+    "pos.void_sale",
+    "pos.return_sale",
+    "sales.view",
+    "sales.view_details",
+    "sales.return",
+    "sales.void",
+    "sales.reprint",
+    "products.view",
+    "products.create",
+    "products.edit",
+    "products.delete",
+    "inventory.view",
+    "inventory.adjust",
+    "inventory.stocktake",
+    "inventory.purchase_entry",
+    "vendors.view",
+    "vendors.create",
+    "vendors.edit",
+    "vendors.delete",
+    "customers.view",
+    "customers.create",
+    "customers.edit",
+    "customers.delete",
+    "branches.view",
+    "branches.create",
+    "branches.edit",
+    "discounts.view",
+    "discounts.create",
+    "discounts.edit",
+    "discounts.delete",
+    "users.view",
+    "users.create",
+    "users.edit",
+    "users.disable",
+    "roles.view",
+    "roles.create",
+    "roles.edit",
+    "roles.delete",
+    "company.view",
+    "company.edit",
+    "bill_builder.view",
+    "bill_builder.edit",
+    "finance.view",
+    "finance.expenses",
+    "finance.ledger",
+    "finance.reverse",
+    "reports.view",
+    "reports.export",
+    "devices.view",
+    "devices.manage",
+    "devices.command",
+    "audit.view",
+    "audit.performance",
+    "settings.view",
+    "settings.edit",
+    "kitchen.view",
+    "kitchen.bump",
+    "shifts.view",
+    "shifts.manage",
+    "zatca.view",
+    "restaurant.session.view",
+    "restaurant.session.open",
+    "restaurant.session.close",
+    "restaurant.session.reconcile",
+    "restaurant.session.approve_discrepancy",
+    "restaurant.session.reopen",
+    "restaurant.session.view_history",
+    "restaurant.session.view_reports",
+    "restaurant.cash_movement.create",
+    "restaurant.cash_movement.view"
+   ]
+  },
+  {
+   "id": "rol_manager",
+   "nameAr": "مدير الفرع",
+   "nameEn": "Branch Manager",
+   "permissions": [
+    "dashboard.view",
+    "pos.view",
+    "pos.create_sale",
+    "pos.apply_discount",
+    "pos.override_price",
+    "pos.void_sale",
+    "pos.return_sale",
+    "sales.view",
+    "sales.view_details",
+    "sales.return",
+    "sales.void",
+    "sales.reprint",
+    "products.view",
+    "products.create",
+    "products.edit",
+    "inventory.view",
+    "inventory.adjust",
+    "inventory.stocktake",
+    "inventory.purchase_entry",
+    "vendors.view",
+    "vendors.create",
+    "vendors.edit",
+    "customers.view",
+    "customers.create",
+    "customers.edit",
+    "discounts.view",
+    "reports.view",
+    "users.view",
+    "branches.view",
+    "kitchen.view",
+    "kitchen.bump",
+    "shifts.view",
+    "shifts.manage",
+    "devices.view",
+    "settings.view",
+    "restaurant.session.view",
+    "restaurant.session.open",
+    "restaurant.session.close",
+    "restaurant.session.reconcile",
+    "restaurant.session.approve_discrepancy",
+    "restaurant.session.view_history",
+    "restaurant.session.view_reports",
+    "restaurant.cash_movement.create",
+    "restaurant.cash_movement.view"
+   ]
+  },
+  {
+   "id": "rol_cashier",
+   "nameAr": "كاشير أول",
+   "nameEn": "Senior Cashier",
+   "permissions": [
+    "pos.view",
+    "pos.create_sale",
+    "pos.apply_discount",
+    "sales.view",
+    "sales.reprint",
+    "customers.view",
+    "customers.create",
+    "shifts.view",
+    "shifts.manage",
+    "restaurant.session.view"
+   ]
+  },
+  {
+   "id": "rol_supervisor",
+   "nameAr": "مشرف الوردية",
+   "nameEn": "Shift Supervisor",
+   "permissions": [
+    "pos.view",
+    "sales.view",
+    "sales.view_details",
+    "sales.reprint",
+    "kitchen.view",
+    "shifts.view",
+    "restaurant.session.view",
+    "restaurant.session.close",
+    "restaurant.session.reconcile",
+    "restaurant.session.approve_discrepancy",
+    "restaurant.session.view_history",
+    "restaurant.cash_movement.view"
+   ]
+  },
+  {
+   "id": "rol_kitchen",
+   "nameAr": "المطبخ / الباريستا",
+   "nameEn": "Kitchen / Barista (KDS)",
+   "permissions": [
+    "kitchen.view",
+    "kitchen.bump"
+   ]
+  },
+  {
+   "id": "rol_accountant",
+   "nameAr": "المراقب المالي",
+   "nameEn": "Finance Controller",
+   "permissions": [
+    "dashboard.view",
+    "pos.view",
+    "sales.view",
+    "sales.view_details",
+    "sales.reprint",
+    "products.view",
+    "inventory.view",
+    "vendors.view",
+    "customers.view",
+    "finance.view",
+    "finance.expenses",
+    "finance.ledger",
+    "finance.reverse",
+    "reports.view",
+    "reports.export",
+    "shifts.view",
+    "zatca.view",
+    "audit.view",
+    "restaurant.session.view",
+    "restaurant.session.view_history",
+    "restaurant.session.view_reports",
+    "restaurant.cash_movement.view"
+   ]
+  },
+  {
+   "id": "rol_inventory",
+   "nameAr": "مسؤول المخزون",
+   "nameEn": "Inventory Manager",
+   "permissions": [
+    "products.view",
+    "products.create",
+    "products.edit",
+    "inventory.view",
+    "inventory.adjust",
+    "inventory.stocktake",
+    "inventory.purchase_entry",
+    "vendors.view",
+    "vendors.create",
+    "vendors.edit"
+   ]
+  },
+  {
+   "id": "rol_maintenance",
+   "nameAr": "مورّد الصيانة",
+   "nameEn": "Vendor (Maintenance)",
+   "permissions": [
+    "settings.view",
+    "products.view",
+    "inventory.view",
+    "users.view",
+    "branches.view",
+    "company.view",
+    "bill_builder.view",
+    "devices.view",
+    "devices.command"
+   ]
+  }
+ ],
+ "company": {
+  "nameEn": "Al-Noor Specialty Coffee & Roastery",
+  "nameAr": "النور للقهوة المختصة والتحميص",
+  "description": "Single-origin roasts, brewed with care since 2016.",
+  "logoUrl": null,
+  "crNumber": "1010456789",
+  "vatNumber": "310122393500003",
+  "phone": "+966 11 465 2200",
+  "email": "hello@alnoor.sa",
+  "website": "alnoor.sa",
+  "address": {
+   "street": "Olaya Street, Building 7421",
+   "district": "Al Olaya",
+   "city": "Riyadh",
+   "postalCode": "12213",
+   "country": "SA"
+  },
+  "social": {
+   "instagram": "@alnoor.coffee",
+   "facebook": "",
+   "x": "@alnoorcoffee",
+   "tiktok": "@alnoor.coffee",
+   "linkedin": "",
+   "youtube": ""
+  },
+  "createdAt": "2026-08-20T09:00:00.000Z",
+  "updatedAt": "2026-08-20T09:00:00.000Z"
+ },
+ "taxRates": null
+}

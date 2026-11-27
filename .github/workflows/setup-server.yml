@@ -1,0 +1,39 @@
+name: Set up a server
+# Linux: installs Docker and prepares /opt/mypos/<env> (run once per new server).
+# Windows: run setup.ps1 on the server yourself first (see the guide); this then installs/updates the deploy
+#          scripts in C:\Project\POS\bin. Run it again any time the scripts change.
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [staging, production], default: staging }
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ vars.DEPLOY_TARGET || 'linux' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keygen -y -P '' -f ~/.ssh/id > /dev/null 2>&1 || { echo "::error::DEPLOY_SSH_KEY is not a usable private key. Paste the whole PRIVATE key (from -----BEGIN OPENSSH PRIVATE KEY----- to -----END OPENSSH PRIVATE KEY-----), not the .pub file, a PuTTY .ppk, or a key with a passphrase."; exit 1; }
+          { echo "HOST=${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets[format('DEPLOY_HOST_{0}', inputs.environment)] }}"
+            echo "PORT=${{ secrets.DEPLOY_PORT || '22' }}"; } >> "$GITHUB_ENV"
+      - name: Windows — install the deploy scripts
+        if: env.TARGET == 'windows'
+        run: |
+          O="-i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new"
+          ssh $O -p "$PORT" "$HOST" "New-Item -ItemType Directory -Force C:\Project\POS\bin, C:\Project\POS\artifacts | Out-Null"
+          scp $O -P "$PORT" deploy/windows/*.ps1 "$HOST:C:/Project/POS/bin/"
+          ssh $O -p "$PORT" "$HOST" "Get-ChildItem C:\Project\POS\bin\*.ps1 | ForEach-Object { \$_.Name }; Test-Path C:\Project\POS\${{ inputs.environment == 'production' && 'POSprod' || 'POSStageing' }}\config\mypos.json" | tee out.txt
+          grep -q True out.txt || { echo "::error::Settings file missing on the server: run setup.ps1 on the server first."; exit 1; }
+          echo "### ✅ Deploy scripts installed on ${{ inputs.environment }} (Windows). Next: deploy from MyPOSFO / MyPosAPI." >> "$GITHUB_STEP_SUMMARY"
+      - name: Linux — install Docker and prepare
+        if: env.TARGET != 'windows'
+        run: |
+          SSH="ssh -i $HOME/.ssh/id -o StrictHostKeyChecking=accept-new -p $PORT $HOST"
+          port=80; [[ "${{ inputs.environment }}" == staging ]] && port=8080
+          tar -C deploy -czf - . | $SSH "mkdir -p /opt/mypos/kit /opt/mypos/bin && tar -C /opt/mypos/kit -xzf - && install -m 755 /opt/mypos/kit/bin/*.sh /opt/mypos/bin/"
+          $SSH "/opt/mypos/bin/setup.sh ${{ inputs.environment }} $port && cp /opt/mypos/kit/compose.yml /opt/mypos/${{ inputs.environment }}/compose.yml"
+          echo "${{ secrets.MYPOS_BOT_TOKEN }}" | $SSH "docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin"
+          echo "### ✅ Server ready (Linux). Now run 'Deploy API' and 'Deploy web' for ${{ inputs.environment }}." >> "$GITHUB_STEP_SUMMARY"

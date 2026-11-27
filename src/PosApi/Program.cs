@@ -51,6 +51,29 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // "dotnet PosApi.dll --migrate": update the configured database (any engine) and exit. Used by every deploy.
+    if (args.Contains("--migrate"))
+        return PosApi.Data.Migrations.SchemaMigrator.Run(builder.Configuration);
+
+    // SaaS mode: "dotnet PosApi.dll --create-admin you@example.com "Your Name"" creates the first super admin and prints
+    // a one-time password. Needs ConnectionStrings__Control.
+    if (Array.IndexOf(args, "--create-admin") is var adminAt and >= 0 && adminAt + 1 < args.Length)
+        return await PosApi.Features.SuperAdmin.SuperAdminSetup.CreateAdminAsync(builder.Configuration, args[adminAt + 1],
+            adminAt + 2 < args.Length ? args[adminAt + 2] : "Super admin");
+
+    // "dotnet PosApi.dll --seed seed/tenant-alnoor.json": add missing setup data (branches, users, roles, catalog). Never
+    // overwrites anything and never creates activity. Run after --migrate.
+    if (Array.IndexOf(args, "--seed") is var seedAt and >= 0 && seedAt + 1 < args.Length)
+    {
+        var seedServices = new ServiceCollection();
+        seedServices.AddSingleton<IConfiguration>(builder.Configuration);
+        seedServices.AddDatabase(builder.Configuration);
+#pragma warning disable ASP0000 // a one-off command run, not the web host
+        await using var seedProvider = seedServices.BuildServiceProvider();
+#pragma warning restore ASP0000
+        return await PosApi.Data.Seeding.TenantSeeder.RunAsync(seedProvider.GetRequiredService<PosApi.Data.IDb>(), args[seedAt + 1], Console.Out);
+    }
+
     /*
      * Read Serilog's settings from configuration, but always keep a console
      * sink whatever that configuration says.
@@ -134,12 +157,13 @@ try
      * config file copied to production should be a loud crash at boot, not a
      * quiet hole nobody notices until it is used.
      */
-    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment())
+    /* Staging is allowed too: it holds test data only, and without an SMS/e-mail sender the fixed code is the
+       only way testers and the QA suite can sign in there. Production still refuses to start. */
+    /* Temporarily allowed everywhere (no SMS/e-mail sender yet), but never silently. */
+    if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment() && !builder.Environment.IsStaging())
     {
-        throw new InvalidOperationException(
-            $"Auth:UseFixedDevOtp is enabled in the '{builder.Environment.EnvironmentName}' " +
-            "environment. This bypasses authentication entirely and is only permitted in " +
-            "Development. Remove it from configuration before deploying.");
+        Log.Warning("Auth:UseFixedDevOtp is ON in {Environment}: every sign-in code is {Code}. Anyone who knows a user's email can sign in. " +
+                    "Turn it off as soon as an SMS/e-mail sender is connected.", builder.Environment.EnvironmentName, auth.FixedDevOtp);
     }
 
     /*
@@ -181,13 +205,18 @@ try
        AuditWriter for why they are not written inline. */
     builder.Services.AddSingleton<IAuditWriter, AuditWriter>();
     builder.Services.AddHostedService<AuditDrainService>();
-    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();
+    builder.Services.AddSingleton<ISqlConnectionFactory, SqlConnectionFactory>();   // legacy SQL Server features (being moved to IDb)
+    builder.Services.AddDatabase(builder.Configuration);                               // engine chosen by Database:Provider
     builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
     builder.Services.AddSingleton<LicenseGuard>();
     builder.Services.AddSingleton(signingKeyProvider);
     builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
     builder.Services.AddScoped<IOtpService, OtpService>();
     builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+    builder.Services.Configure<PosApi.Tenancy.TenancyOptions>(builder.Configuration.GetSection(PosApi.Tenancy.TenancyOptions.Section));
+    builder.Services.AddSingleton<PosApi.Tenancy.ControlStore>();
+    builder.Services.AddSingleton<PosApi.Tenancy.ClientMetrics>();
+    builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
     builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
@@ -234,6 +263,17 @@ try
      * edge, per-challenge attempt counting is not enough — an attacker simply
      * requests fresh challenges. This caps the whole flow per caller.
      */
+    /* Behind IIS/nginx every request arrives from 127.0.0.1. Read the visitor's address from X-Forwarded-For (sent by
+       the local reverse proxy only: loopback is the default trusted proxy), so rate limits, the audit trail and
+       login attempts see real addresses instead of one shared one. */
+    builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                           | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+        o.ForwardLimit = 1;
+    });
+
+    var authPermitLimit = Math.Max(1, builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10));
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -243,7 +283,9 @@ try
                 partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 10,
+                    /* 10 a minute per address in production; staging raises it (RateLimiting:AuthPermitLimit) so the QA
+                       suite, which signs in many times from one address, is not refused. */
+                    PermitLimit = authPermitLimit,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0
                 }));
@@ -349,6 +391,9 @@ try
     });
 
     var app = builder.Build();
+    app.UseForwardedHeaders();   // first: everything after it sees the real client address
+    /* SaaS mode: which client (and so which database) this request is for, before anything reads a database. */
+    app.UseMiddleware<PosApi.Tenancy.TenantResolutionMiddleware>();
 
     /*------------------------------------------------------------- pipeline */
 
@@ -462,12 +507,22 @@ try
     app.UseSerilogRequestLogging();
     app.UseRateLimiter();
     app.UseAuthentication();
+    app.UseMiddleware<PosApi.Tenancy.TenantTokenGuardMiddleware>();
     app.UseAuthorization();
 
     app.MapAuthEndpoints();
     app.MapCatalogEndpoints();
-    app.MapCatalogWriteEndpoints();
+
     app.MapSalesEndpoints();
+    PosApi.Features.OrderLight.OrderLightEndpoints.MapOrderLightEndpoints(app);
+    PosApi.Features.Kitchen.KitchenTicketEndpoints.MapKitchenTicketEndpoints(app);
+    PosApi.Features.Store.TenantStoreEndpoints.MapTenantStoreEndpoints(app);
+    PosApi.Features.Orders.OrderTimelineEndpoints.MapOrderTimelineEndpoints(app);
+    PosApi.Features.Sales.CreditNoteEndpoints.MapCreditNoteEndpoints(app);
+    PosApi.Features.Zatca.ZatcaSetupEndpoints.MapZatcaSetupEndpoints(app);
+    PosApi.Features.SuperAdmin.SuperAdminEndpoints.MapSuperAdminEndpoints(app);
+    PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
+    PosApi.Features.SuperAdmin.ConsoleEndpoints.MapConsoleEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
@@ -495,15 +550,28 @@ try
         utc = DateTime.UtcNow,
         /* Which binary is answering. Compare against when you last built. */
         builtAtUtc,
+        /* The deployed image tag (sha-… or v…), set by deploy/compose.yml. */
+        version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev",
         environment = app.Environment.EnvironmentName
     }))
        .AllowAnonymous()
        .WithTags("Health");
 
-    app.MapGet("/health/db", async (ISqlConnectionFactory db, CancellationToken ct) =>
+    app.MapGet("/health/db", async (PosApi.Data.IDb db, CancellationToken ct) =>
     {
-        await using var connection = await db.CreateOpenAsync(ct);
-        return Results.Ok(new { status = "ok", database = connection.Database });
+        await using var connection = await db.OpenAsync(ct);
+        var q = db.Query(connection);
+        // Proof that this is the database the migrations ran on: latest schema version and table/user counts.
+        long? schemaVersion = null; int tables = 0, users = 0;
+        try
+        {
+            schemaVersion = await SqlKata.Execution.QueryExtensions.MaxAsync<long?>(q.Query("VersionInfo"), "Version", cancellationToken: ct);
+            tables = await SqlKata.Execution.QueryExtensions.CountAsync<int>(
+                q.Query("information_schema.tables").WhereIn("table_schema", new[] { "core", "audit" }), cancellationToken: ct);
+            users = await SqlKata.Execution.QueryExtensions.CountAsync<int>(q.Query("core.app_user"), cancellationToken: ct);
+        }
+        catch (Exception) { /* not migrated yet: report what we have */ }
+        return Results.Ok(new { status = "ok", provider = db.Provider.Name, database = connection.Database, schemaVersion, tables, users });
     }).AllowAnonymous().WithTags("Health");
 
     /*

@@ -25,14 +25,14 @@ public interface IOtpService
 /// </summary>
 public sealed class OtpService : IOtpService
 {
-    private readonly ISqlConnectionFactory _db;
+    private readonly PosApi.Data.IDb _db;
     private readonly IPasswordHasher _hasher;
     private readonly AuthOptions _options;
     private readonly IHostEnvironment _environment;
     private readonly ILogger<OtpService> _logger;
 
     public OtpService(
-        ISqlConnectionFactory db,
+        PosApi.Data.IDb db,
         IPasswordHasher hasher,
         IOptions<AuthOptions> options,
         IHostEnvironment environment,
@@ -45,7 +45,9 @@ public sealed class OtpService : IOtpService
         _logger = logger;
     }
 
-    private bool UseDevCode => _options.UseFixedDevOtp && _environment.IsDevelopment();
+    /* For now (no SMS/e-mail sender yet) the fixed code is allowed in every environment when switched on.
+       Remove Auth:UseFixedDevOtp once a sender is connected: with it, knowing someone's email is enough to sign in. */
+    private bool UseDevCode => _options.UseFixedDevOtp;
 
     public async Task<OtpChallenge> IssueAsync(string identifier, string purpose, CancellationToken ct)
     {
@@ -55,14 +57,14 @@ public sealed class OtpService : IOtpService
         var challengeId = Guid.NewGuid().ToString("N");
         var expiresAt = DateTime.UtcNow.AddMinutes(_options.OtpValidMinutes);
 
-        await using var connection = _db.Create();
+        await using var connection = await _db.OpenAsync(ct);
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO core.OtpChallenge
-                (ChallengeId, Identifier, Purpose, CodeHash, CodeSalt, ExpiresAtUtc, Attempts, ConsumedAtUtc)
+            INSERT INTO core.otp_challenge
+                (challenge_id, identifier, purpose, code_hash, code_salt, expires_at_utc, attempts, created_at_utc)
             VALUES
-                (@ChallengeId, @Identifier, @Purpose, @CodeHash, @CodeSalt, @ExpiresAtUtc, 0, NULL);
+                (@ChallengeId, @Identifier, @Purpose, @CodeHash, @CodeSalt, @ExpiresAtUtc, 0, @Now);
             """,
             new
             {
@@ -71,7 +73,8 @@ public sealed class OtpService : IOtpService
                 Purpose = purpose,
                 CodeHash = hash,
                 CodeSalt = salt,
-                ExpiresAtUtc = expiresAt
+                ExpiresAtUtc = expiresAt,
+                Now = DateTime.UtcNow
             },
             cancellationToken: ct));
 
@@ -93,13 +96,13 @@ public sealed class OtpService : IOtpService
 
     public async Task<OtpResult> VerifyAsync(string challengeId, string code, CancellationToken ct)
     {
-        await using var connection = _db.Create();
+        await using var connection = await _db.OpenAsync(ct);
 
         var row = await connection.QuerySingleOrDefaultAsync<OtpRow>(new CommandDefinition(
             """
-            SELECT ChallengeId, CodeHash, CodeSalt, ExpiresAtUtc, Attempts, ConsumedAtUtc
-            FROM core.OtpChallenge
-            WHERE ChallengeId = @ChallengeId;
+            SELECT challenge_id, code_hash, code_salt, expires_at_utc, attempts, consumed_at_utc
+            FROM core.otp_challenge
+            WHERE challenge_id = @ChallengeId
             """,
             new { ChallengeId = challengeId },
             cancellationToken: ct));
@@ -111,7 +114,7 @@ public sealed class OtpService : IOtpService
         // Count the attempt before checking it. Incrementing afterwards would
         // let a caller who abandons the request retry without cost.
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE core.OtpChallenge SET Attempts = Attempts + 1 WHERE ChallengeId = @ChallengeId;",
+            "UPDATE core.otp_challenge SET attempts = attempts + 1 WHERE challenge_id = @ChallengeId",
             new { ChallengeId = challengeId },
             cancellationToken: ct));
 
@@ -119,8 +122,8 @@ public sealed class OtpService : IOtpService
 
         // Consume it. A one-time code that works twice is not one-time.
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE core.OtpChallenge SET ConsumedAtUtc = SYSUTCDATETIME() WHERE ChallengeId = @ChallengeId;",
-            new { ChallengeId = challengeId },
+            "UPDATE core.otp_challenge SET consumed_at_utc = @Now WHERE challenge_id = @ChallengeId",
+            new { ChallengeId = challengeId, Now = DateTime.UtcNow },
             cancellationToken: ct));
 
         return OtpResult.Valid;
