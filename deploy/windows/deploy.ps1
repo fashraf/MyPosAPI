@@ -57,6 +57,17 @@ if ($App -eq 'web') {
 }
 
 Set-Current $c $App $Tag
+if ($App -eq 'api') {
+  # The web site forwards /api and /health to the API. Until the front end is deployed the first time its folder has no
+  # such rules, so every check would answer 404 (v1.0.0 / v1.0.1 on production). Make sure they are there.
+  $webCur = Join-Path $c.base 'web\current'
+  $wc = Join-Path $webCur 'web.config'
+  if ((Test-Path $webCur) -and -not ((Test-Path $wc) -and (Select-String -Path $wc -Pattern 'name="api"' -Quiet))) {
+    Write-WebConfig $c $webCur
+    Log "Added the /api forwarding rules to the web site (front end not deployed yet)."
+  }
+  New-Item -ItemType Directory -Force (Join-Path $c.base 'logs') | Out-Null
+}
 Restart-WebAppPool -Name $pool -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $c.base 'api\current\app_offline.htm') -ErrorAction SilentlyContinue
 
