@@ -220,6 +220,8 @@ try
     builder.Services.Configure<PosApi.Tenancy.TenancyOptions>(builder.Configuration.GetSection(PosApi.Tenancy.TenancyOptions.Section));
     builder.Services.AddSingleton<PosApi.Tenancy.ControlStore>();
     builder.Services.AddSingleton<PosApi.Tenancy.ClientMetrics>();
+    builder.Services.AddSingleton<PosApi.Observability.ErrorLog>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<PosApi.Observability.ErrorLog>());
     builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
@@ -433,6 +435,12 @@ try
         }
 
         logger.LogError(feature?.Error, "Unhandled exception on {Path}", context.Request.Path);
+        /* Ayn's Errors page: one row per distinct error, with how often it happened. */
+        context.RequestServices.GetService<PosApi.Observability.ErrorLog>()?.Report(new PosApi.Observability.ErrorReport(
+            PosApi.Observability.ErrorLog.SourceOf(feature?.Error), "api", feature?.Error.Message ?? "Unhandled error", feature?.Error.ToString(),
+            context.Request.Path + context.Request.QueryString, context.Request.Method, 500,
+            context.User.Identity?.Name, context.Request.Headers.UserAgent.ToString(), context.Connection.RemoteIpAddress?.ToString(),
+            PosApi.Tenancy.TenantContext.Current?.Id));
 
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
 
@@ -527,6 +535,7 @@ try
     PosApi.Features.SuperAdmin.SuperAdminEndpoints.MapSuperAdminEndpoints(app);
     PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
     PosApi.Features.SuperAdmin.ConsoleEndpoints.MapConsoleEndpoints(app);
+    PosApi.Observability.ObservabilityEndpoints.MapObservabilityEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
