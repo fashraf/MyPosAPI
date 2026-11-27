@@ -521,6 +521,7 @@ try
     PosApi.Features.Sales.CreditNoteEndpoints.MapCreditNoteEndpoints(app);
     PosApi.Features.Zatca.ZatcaSetupEndpoints.MapZatcaSetupEndpoints(app);
     PosApi.Features.SuperAdmin.SuperAdminEndpoints.MapSuperAdminEndpoints(app);
+    PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();

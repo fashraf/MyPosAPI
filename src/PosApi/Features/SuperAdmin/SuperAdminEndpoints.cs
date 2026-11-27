@@ -218,7 +218,7 @@ public static partial class SuperAdminEndpoints
     private static readonly object MigrationLock = new();
 
     /// <summary>The client's business, first branch and owner account, in the client's own database.</summary>
-    private static async Task<IResult> OwnerAsync(long id, OwnerBody body, ControlStore control, IAuthStore store, ICurrentUser user, CancellationToken ct)
+    private static async Task<IResult> OwnerAsync(long id, OwnerBody body, ControlStore control, IAuthStore store, IDb db, ICurrentUser user, CancellationToken ct)
     {
         var row = await Find(control, id, ct);
         if (row is null) return NotFound();
@@ -237,6 +237,9 @@ public static partial class SuperAdminEndpoints
                 body.OwnerEmail.Trim().ToLowerInvariant(), Blank(body.OwnerMobile)), ct);
             if (error != RegistrationError.None)
                 return Error(409, error.ToString(), $"The owner could not be created ({error}). An owner with that email may already exist.", "تعذر إنشاء المالك. قد يكون البريد مستخدمًا.");
+            /* Standard roles with every permission the app uses (restaurant day, kitchen, finance …). No demo items or people. */
+            var starter = Path.Combine(AppContext.BaseDirectory, "seed", "standard-roles.json");
+            if (File.Exists(starter)) await PosApi.Data.Seeding.TenantSeeder.RunAsync(db, starter, TextWriter.Null);
             await using var c = await control.OpenAsync(ct);
             await control.Query(c).Query("control.tenant").Where("tenant_id", id).UpdateAsync(new Dictionary<string, object?>
                 { ["status"] = "active", ["contact_email"] = row["contact_email"] ?? body.OwnerEmail, ["updated_at_utc"] = DateTime.UtcNow }, cancellationToken: ct);
