@@ -67,6 +67,13 @@ if (Test-Health $c 150) {
   Log ("OK: $Env is healthy on web={0} api={1} ({2:N0}s)." -f (Get-Current $c 'web'), (Get-Current $c 'api'), $sw.Elapsed.TotalSeconds)
 } else {
   Log "New version is NOT healthy - rolling back to $App=$prev."
+  # Why: each check's answer, then the last lines the API wrote (start-up errors land here).
+  foreach ($u in '/', '/health', '/health/db') {
+    try { $r = Invoke-WebRequest "http://localhost:$($c.webPort)$u" -UseBasicParsing -TimeoutSec 10; Log "  $u -> $($r.StatusCode)" }
+    catch { Log "  $u -> $($_.Exception.Message) $(try { (New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd().Substring(0, 300) } catch { '' })" }
+  }
+  $last = Get-ChildItem (Join-Path $c.base 'logs') -Filter 'api*' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($last) { Log "  --- $($last.Name) (last 40 lines) ---"; Get-Content $last.FullName -Tail 40 | ForEach-Object { Log "  $_" } }
   Set-Current $c $App $prev
   Restart-WebAppPool -Name $pool -ErrorAction SilentlyContinue
   if (Test-Health $c 90) { Log 'Rolled back, previous version healthy.' } else { Log 'WARNING: previous version is not healthy either.' }
