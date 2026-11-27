@@ -21,6 +21,7 @@ namespace PosApi.Observability;
 public static class AynEndpoints
 {
     public sealed record UserStatusBody(bool Active, string? Reason);
+    public sealed record AdminBody(string Username, string Name, string Email, string? Role);
     public sealed record PaymentBody(long ClientId, long AmountH, string? Method, string? Reference, string? Period, string? Note, string? PaidOn);
 
     public static void MapAynEndpoints(this IEndpointRouteBuilder app)
@@ -52,6 +53,9 @@ public static class AynEndpoints
         g.MapGet("/platform/devices", DevicesAsync);
         g.MapGet("/support/issues", IssuesAsync);
         g.MapGet("/find", FindAsync);
+        g.MapGet("/admins", AdminsAsync);
+        g.MapPost("/admins", CreateAdminAsync);
+        g.MapPost("/admins/{adminId:long}/status", AdminStatusAsync);
     }
 
     private static string Id(long v) => v.ToString(CultureInfo.InvariantCulture);
@@ -633,6 +637,54 @@ public static class AynEndpoints
             title = (string)e["message"]!, category = (string)e["source"]!, priority = Convert.ToInt32(e["occurrences"]) > 20 ? "high" : Convert.ToInt32(e["occurrences"]) > 3 ? "medium" : "low",
             status = "open", openedAt = Dt(e["first_at_utc"]), updatedAt = Dt(e["last_at_utc"]), occurrences = Convert.ToInt32(e["occurrences"]),
         }));
+    }
+
+    /* ══════════════════════════════════════ Ayn administrators ══ */
+
+    private static async Task<IResult> AdminsAsync(ControlStore control, CancellationToken ct)
+    {
+        await using var c = await control.OpenAsync(ct);
+        var rows = (await control.Query(c).Query("control.admin_user").OrderBy("admin_id").GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>();
+        var lastSeen = (await control.Query(c).Query("control.tenant_event").Select("actor").SelectRaw("MAX(at_utc) AS at").GroupBy("actor").GetAsync(cancellationToken: ct))
+            .Cast<IDictionary<string, object?>>().Where(r => r["actor"] is string).ToDictionary(r => ((string)r["actor"]!).ToLowerInvariant(), r => Dt(r["at"]));
+        return Results.Ok(rows.Select(a => new
+        {
+            id = Id(L(a["admin_id"])), name = (string)a["name"]!, email = (string)a["email"]!, username = a["username"] as string, role = (a["role"] as string) ?? "Super admin",
+            active = (bool)(a["is_active"] ?? true), mustChangePassword = (bool)(a["must_change_password"] ?? false), createdAt = Dt(a["created_at_utc"]),
+            lastActionAt = lastSeen.GetValueOrDefault(((string)a["email"]!).ToLowerInvariant()),
+        }));
+    }
+
+    private static async Task<IResult> CreateAdminAsync(AdminBody body, ControlStore control, IPasswordHasher hasher, ICurrentUser user, HttpContext http, CancellationToken ct)
+    {
+        var username = (body.Username ?? "").Trim().ToLowerInvariant();
+        var email = (body.Email ?? "").Trim().ToLowerInvariant();
+        if (username.Length < 3 || !email.Contains('@') || string.IsNullOrWhiteSpace(body.Name)) return Fail(422, "missing", "Name, a username (3+ characters) and an email are required.");
+        await using var c = await control.OpenAsync(ct);
+        var q = control.Query(c);
+        if (await q.Query("control.admin_user").Where("email", email).OrWhere("username", username).ExistsAsync(cancellationToken: ct)) return Fail(409, "exists", "An administrator with that username or email already exists.");
+        var password = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(9)).Replace('/', 'x').Replace('+', 'y');
+        var (hash, salt) = hasher.Hash(password);
+        await q.Query("control.admin_user").InsertAsync(new Dictionary<string, object?>
+        {
+            ["email"] = email, ["username"] = username, ["name"] = body.Name.Trim(), ["role"] = string.IsNullOrWhiteSpace(body.Role) ? "Super admin" : body.Role.Trim(),
+            ["password_hash"] = hash, ["password_salt"] = salt, ["must_change_password"] = true, ["is_active"] = true, ["created_at_utc"] = DateTime.UtcNow,
+        }, cancellationToken: ct);
+        var audit = await ConsoleEndpoints.Record(control, null, "admin.create", $"Created administrator {username}", null, email, null, user, http, ct);
+        return Results.Ok(new { ok = true, username, temporaryPassword = password, audit });
+    }
+
+    private static async Task<IResult> AdminStatusAsync(long adminId, UserStatusBody body, ControlStore control, ICurrentUser user, HttpContext http, CancellationToken ct)
+    {
+        await using var c = await control.OpenAsync(ct);
+        var q = control.Query(c);
+        var row = (await q.Query("control.admin_user").Where("admin_id", adminId).GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>().FirstOrDefault();
+        if (row is null) return Fail(404, "not_found", "That administrator does not exist.");
+        if (string.Equals((string)row["email"]!, user.Username, StringComparison.OrdinalIgnoreCase) && !body.Active) return Fail(422, "self", "You cannot deactivate your own account.");
+        if (!body.Active && await q.Query("control.admin_user").Where("is_active", true).CountAsync<int>(cancellationToken: ct) <= 1) return Fail(422, "last_admin", "At least one active administrator must remain.");
+        await q.Query("control.admin_user").Where("admin_id", adminId).UpdateAsync(new Dictionary<string, object?> { ["is_active"] = body.Active }, cancellationToken: ct);
+        var audit = await ConsoleEndpoints.Record(control, null, body.Active ? "admin.activate" : "admin.deactivate", $"{(body.Active ? "Activated" : "Deactivated")} administrator {row["username"] ?? row["email"]}", null, null, body.Reason, user, http, ct);
+        return Results.Ok(new { ok = true, audit });
     }
 
     /* ══════════════════════════════════════ search across everything ══ */
