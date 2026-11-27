@@ -45,7 +45,9 @@ public sealed class OtpService : IOtpService
         _logger = logger;
     }
 
-    private bool UseDevCode => _options.UseFixedDevOtp && (_environment.IsDevelopment() || _environment.IsStaging());
+    /* For now (no SMS/e-mail sender yet) the fixed code is allowed in every environment when switched on.
+       Remove Auth:UseFixedDevOtp once a sender is connected: with it, knowing someone's email is enough to sign in. */
+    private bool UseDevCode => _options.UseFixedDevOtp;
 
     public async Task<OtpChallenge> IssueAsync(string identifier, string purpose, CancellationToken ct)
     {

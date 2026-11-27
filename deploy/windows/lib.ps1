@@ -143,7 +143,10 @@ function Write-ApiConfig($c, [string]$Folder, [string]$Tag) {
     Jwt__SigningKey = $c.jwtSigningKey; Cors__AllowedOrigins__0 = $c.publicUrl
     Auth__LoginMode = 'TwoStep'
     # Staging only: fixed one-time code (no SMS/e-mail sender yet). Production refuses to start with it.
-    Auth__UseFixedDevOtp = $(if ($c.environment -eq 'staging') { 'true' } else { 'false' })
+    # For now every environment uses the fixed code 1234 (no SMS/e-mail sender yet). Set "fixedOtp": false in
+    # config\mypos.json to turn it off once a sender is connected.
+    Auth__UseFixedDevOtp = $(if ($c.PSObject.Properties['fixedOtp'] -and $c.fixedOtp -eq $false) { 'false' } else { 'true' })
+    Auth__FixedDevOtp = '1234'
     # Staging: the QA suite signs in many times from one address.
     RateLimiting__AuthPermitLimit = $(if ($c.environment -eq 'staging') { '60' } else { '10' })
     # Order light (ESP32): device key and poll interval, from config\mypos.json ("orderLightKey", "orderLightPollSeconds").
