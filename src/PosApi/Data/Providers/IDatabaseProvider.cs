@@ -45,4 +45,7 @@ public interface ISqlDialect
 
     /// <summary>Creates an empty database (name already checked: lowercase letters, digits, underscore) owned by the user.</summary>
     string CreateDatabase(string name, string owner);
+
+    /// <summary>Connections open on the database server right now (server load gauge).</summary>
+    string ActiveConnections { get; }
 }

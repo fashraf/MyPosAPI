@@ -19,6 +19,7 @@ public sealed class SqlServerProvider : IDatabaseProvider, ISqlDialect
         insertSql.Replace(" VALUES", string.Concat(" OUTPUT inserted.", idColumn, " VALUES"), StringComparison.OrdinalIgnoreCase);
     public string UtcNow => "SYSUTCDATETIME()";
 
+    public string ActiveConnections => "SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE is_user_process = 1";
     public string CreateDatabase(string name, string owner) => $"CREATE DATABASE [{name}]";
     public string DatabaseSizeBytes => "SELECT CAST(SUM(CAST(size AS BIGINT)) * 8192 AS BIGINT) FROM sys.database_files";
 }
