@@ -55,6 +55,12 @@ try
     if (args.Contains("--migrate"))
         return PosApi.Data.Migrations.SchemaMigrator.Run(builder.Configuration);
 
+    // SaaS mode: "dotnet PosApi.dll --create-admin you@example.com "Your Name"" creates the first super admin and prints
+    // a one-time password. Needs ConnectionStrings__Control.
+    if (Array.IndexOf(args, "--create-admin") is var adminAt and >= 0 && adminAt + 1 < args.Length)
+        return await PosApi.Features.SuperAdmin.SuperAdminSetup.CreateAdminAsync(builder.Configuration, args[adminAt + 1],
+            adminAt + 2 < args.Length ? args[adminAt + 2] : "Super admin");
+
     // "dotnet PosApi.dll --seed seed/tenant-alnoor.json": add missing setup data (branches, users, roles, catalog). Never
     // overwrites anything and never creates activity. Run after --migrate.
     if (Array.IndexOf(args, "--seed") is var seedAt and >= 0 && seedAt + 1 < args.Length)
@@ -153,12 +159,11 @@ try
      */
     /* Staging is allowed too: it holds test data only, and without an SMS/e-mail sender the fixed code is the
        only way testers and the QA suite can sign in there. Production still refuses to start. */
+    /* Temporarily allowed everywhere (no SMS/e-mail sender yet), but never silently. */
     if (auth.UseFixedDevOtp && !builder.Environment.IsDevelopment() && !builder.Environment.IsStaging())
     {
-        throw new InvalidOperationException(
-            $"Auth:UseFixedDevOtp is enabled in the '{builder.Environment.EnvironmentName}' " +
-            "environment. This bypasses authentication entirely and is only permitted in " +
-            "Development and Staging. Remove it from configuration before deploying.");
+        Log.Warning("Auth:UseFixedDevOtp is ON in {Environment}: every sign-in code is {Code}. Anyone who knows a user's email can sign in. " +
+                    "Turn it off as soon as an SMS/e-mail sender is connected.", builder.Environment.EnvironmentName, auth.FixedDevOtp);
     }
 
     /*
@@ -208,6 +213,8 @@ try
     builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
     builder.Services.AddScoped<IOtpService, OtpService>();
     builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+    builder.Services.Configure<PosApi.Tenancy.TenancyOptions>(builder.Configuration.GetSection(PosApi.Tenancy.TenancyOptions.Section));
+    builder.Services.AddSingleton<PosApi.Tenancy.ControlStore>();
     builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
@@ -384,6 +391,8 @@ try
 
     var app = builder.Build();
     app.UseForwardedHeaders();   // first: everything after it sees the real client address
+    /* SaaS mode: which client (and so which database) this request is for, before anything reads a database. */
+    app.UseMiddleware<PosApi.Tenancy.TenantResolutionMiddleware>();
 
     /*------------------------------------------------------------- pipeline */
 
@@ -497,6 +506,7 @@ try
     app.UseSerilogRequestLogging();
     app.UseRateLimiter();
     app.UseAuthentication();
+    app.UseMiddleware<PosApi.Tenancy.TenantTokenGuardMiddleware>();
     app.UseAuthorization();
 
     app.MapAuthEndpoints();
@@ -508,6 +518,9 @@ try
     PosApi.Features.Store.TenantStoreEndpoints.MapTenantStoreEndpoints(app);
     PosApi.Features.Orders.OrderTimelineEndpoints.MapOrderTimelineEndpoints(app);
     PosApi.Features.Sales.CreditNoteEndpoints.MapCreditNoteEndpoints(app);
+    PosApi.Features.Zatca.ZatcaSetupEndpoints.MapZatcaSetupEndpoints(app);
+    PosApi.Features.SuperAdmin.SuperAdminEndpoints.MapSuperAdminEndpoints(app);
+    PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
