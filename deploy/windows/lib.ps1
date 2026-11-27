@@ -77,6 +77,11 @@ function Remove-OldReleases($c, [string]$App) {
     Sort-Object LastWriteTime -Descending | Select-Object -Skip $keep | ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
 }
 
+function Test-Saas($c) { return ($c.PSObject.Properties['saas'] -and $c.saas -and $c.saas.controlDatabase) }
+function Get-ControlConnection($c) {
+  "Host=localhost;Port=5432;Database=$($c.saas.controlDatabase);Username=$($c.dbUser);Password=$($c.dbPassword)"
+}
+
 # web.config for the site: SPA fallback + /api, /health, /cloudprnt forwarded to this environment's API.
 function Write-WebConfig($c, [string]$Folder) {
   # "httpsHost" in config\mypos.json (set by setup-https.ps1): http://<that host> is sent to https://. The IP address
@@ -144,6 +149,15 @@ function Write-ApiConfig($c, [string]$Folder, [string]$Tag) {
     # Order light (ESP32): device key and poll interval, from config\mypos.json ("orderLightKey", "orderLightPollSeconds").
     OrderLight__Key = $(if ($c.PSObject.Properties['orderLightKey']) { $c.orderLightKey } else { '' })
     OrderLight__PollSeconds = $(if ($c.PSObject.Properties['orderLightPollSeconds']) { "$($c.orderLightPollSeconds)" } else { '10' })
+  }
+  # SaaS mode ("saas" block in config\mypos.json): one API for every client, each with its own database.
+  if (Test-Saas $c) {
+    $vars.Remove('ConnectionStrings__PosMain')
+    $vars['Tenancy__Mode'] = 'multi'
+    $vars['Tenancy__RootDomain'] = $c.saas.rootDomain
+    $vars['Tenancy__AdminHost'] = $c.saas.adminHost
+    $vars['ConnectionStrings__Control'] = Get-ControlConnection $c
+    $vars['Secrets__Key'] = $c.saas.secretsKey
   }
   $envXml = ($vars.GetEnumerator() | ForEach-Object { "        <environmentVariable name=`"$($_.Key)`" value=`"$([Security.SecurityElement]::Escape([string]$_.Value))`" />" }) -join "`n"
   @"

@@ -23,21 +23,25 @@ public interface IDb
 
 public sealed class Db : IDb
 {
-    private readonly string _connectionString;
+    private readonly string? _connectionString;
 
     public Db(IDatabaseProvider provider, IConfiguration configuration)
     {
         Provider = provider;
-        _connectionString = configuration.GetConnectionString("PosMain")
-            ?? throw new InvalidOperationException("Connection string 'PosMain' is missing (ConnectionStrings__PosMain).");
+        /* SaaS mode has no single database: each request's client supplies it (TenantContext). */
+        _connectionString = configuration.GetConnectionString("PosMain");
     }
+
+    private string ConnectionString => PosApi.Tenancy.TenantContext.Current?.ConnectionString
+        ?? _connectionString
+        ?? throw new InvalidOperationException("No database for this request (ConnectionStrings__PosMain, or a client in SaaS mode).");
 
     public IDatabaseProvider Provider { get; }
 
     public async Task<DbConnection> OpenAsync(CancellationToken ct)
     {
         /* Timed: every statement a request runs is measured and listed on the API performance page. */
-        var connection = new Profiling.TimedConnection(Provider.CreateConnection(_connectionString));
+        var connection = new Profiling.TimedConnection(Provider.CreateConnection(ConnectionString));
         await connection.OpenAsync(ct);
         return connection;
     }

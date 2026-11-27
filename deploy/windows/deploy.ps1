@@ -31,17 +31,23 @@ if ($App -eq 'web') {
   # Database migrations: the API package migrates the database itself (provider-independent) when asked to.
   $env:Database__Provider = 'postgres'
   $env:ConnectionStrings__PosMain = "Host=localhost;Port=5432;Database=$($c.database);Username=$($c.dbUser);Password=$($c.dbPassword)"
+  if (Test-Saas $c) {
+    # SaaS: the control database, then every client's database (one failing does not stop the others).
+    $env:Tenancy__Mode = 'multi'; $env:ConnectionStrings__Control = Get-ControlConnection $c; $env:Secrets__Key = $c.saas.secretsKey
+    $env:Tenancy__RootDomain = $c.saas.rootDomain
+  }
   Push-Location $rel
   & dotnet .\PosApi.dll --migrate
   $code = $LASTEXITCODE
   # Setup data (branches, users, roles, items, combos). Only adds what is missing; never touches activity.
   # Staging always; production only when "seedOnEmpty": true is set in config\mypos.json.
-  if ($code -eq 0 -and ($c.environment -eq 'staging' -or $c.seedOnEmpty) -and (Test-Path .\seed\tenant-alnoor.json)) {
+  if ($code -eq 0 -and -not (Test-Saas $c) -and ($c.environment -eq 'staging' -or $c.seedOnEmpty) -and (Test-Path .\seed\tenant-alnoor.json)) {
     & dotnet .\PosApi.dll --seed .\seed\tenant-alnoor.json
     $code = $LASTEXITCODE
   }
   Pop-Location
   Remove-Item Env:\ConnectionStrings__PosMain
+  foreach ($v in 'Tenancy__Mode', 'ConnectionStrings__Control', 'Secrets__Key', 'Tenancy__RootDomain') { Remove-Item "Env:\$v" -ErrorAction SilentlyContinue }
   if ($code -ne 0) {
     Log "Migration failed - old version keeps running."
     if (-not $same) { Remove-Item $rel -Recurse -Force -ErrorAction SilentlyContinue }

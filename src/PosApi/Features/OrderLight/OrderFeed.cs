@@ -15,15 +15,27 @@ public sealed record OrderEvent(long Seq, long InvoiceNo, int OrderNo, long Tota
 /// the new position without blinking. (Several API instances behind a load balancer would need a shared feed, e.g.
 /// Redis; this deployment runs one.)
 /// </summary>
+/// <summary>One feed per client (SaaS mode); a single business has one.</summary>
 public sealed class OrderFeed
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Feed> _feeds = new();
+    private Feed Current => _feeds.GetOrAdd(PosApi.Tenancy.TenantContext.Key, _ => new Feed());
+
+    public string BootId { get; } = Guid.NewGuid().ToString("N")[..12];
+    public long LastSeq => Current.LastSeq;
+    public int TestId => Current.TestId;
+    public void Test() => Current.Test();
+    public Task EnsureSeededAsync(Func<Task<long>> latestInvoice) => Current.EnsureSeededAsync(latestInvoice);
+    public void Publish(long invoiceNo, int orderNo, long totalH, string branchId, string? orderType) => Current.Publish(invoiceNo, orderNo, totalH, branchId, orderType);
+    public (long LastSeq, IReadOnlyList<OrderEvent> Orders) Since(long since, int max = 50) => Current.Since(since, max);
+}
+
+internal sealed class Feed
 {
     private const int Keep = 500;
     private readonly object _gate = new();
     private readonly LinkedList<OrderEvent> _events = new();
     private long _seq;
-
-    /// <summary>Changes every time the API starts, so a board knows its old position no longer applies.</summary>
-    public string BootId { get; } = Guid.NewGuid().ToString("N")[..12];
 
     public long LastSeq { get { lock (_gate) return _seq; } }
 

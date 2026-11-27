@@ -39,15 +39,19 @@ public sealed class AuditWriter : IAuditWriter
 
     internal ChannelReader<object> Reader => _queue.Reader;
 
+    /// <summary>A queued row and the client (SaaS mode) whose database it belongs in.</summary>
+    internal sealed record Queued(object Item, PosApi.Tenancy.TenantInfo? Tenant, bool Admin);
+
     public void Record(AuditEntry entry)
     {
-        if (!_queue.Writer.TryWrite(entry))
+        if (!_queue.Writer.TryWrite(new Queued(entry, PosApi.Tenancy.TenantContext.Current, PosApi.Tenancy.TenantContext.Admin)))
         {
             _logger.LogWarning("Audit queue is full; an entry was dropped.");
         }
     }
 
-    public void RecordTiming(RequestTiming timing) => _queue.Writer.TryWrite(timing);
+    public void RecordTiming(RequestTiming timing) =>
+        _queue.Writer.TryWrite(new Queued(timing, PosApi.Tenancy.TenantContext.Current, PosApi.Tenancy.TenantContext.Admin));
 }
 
 /// <summary>Drains the queue into SQL Server.</summary>
@@ -67,8 +71,13 @@ public sealed class AuditDrainService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var item in _writer.Reader.ReadAllAsync(stoppingToken))
+        await foreach (var queued in _writer.Reader.ReadAllAsync(stoppingToken))
         {
+            /* Write into the database of the client the request belonged to. Super admin requests have no client database. */
+            var wrapped = (AuditWriter.Queued)queued;
+            if (wrapped.Admin) continue;
+            var item = wrapped.Item;
+            PosApi.Tenancy.TenantContext.Current = wrapped.Tenant;
             try
             {
                 await using var connection = await _db.OpenAsync(stoppingToken);
