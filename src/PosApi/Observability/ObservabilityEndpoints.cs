@@ -54,6 +54,7 @@ public static partial class ObservabilityEndpoints
         g.MapGet("/logins", LoginsAsync);
         g.MapGet("/analytics/activity", ActivityAnalyticsAsync);
         g.MapPost("/databases", CreateDatabaseAsync);
+        g.MapGet("/platform/users", AllUsersAsync);
     }
 
     /* ------------------------------------------------------------------ fan-out over client databases */
@@ -383,6 +384,38 @@ public static partial class ObservabilityEndpoints
             },
             daily, hoursOfDay, perClient, topUsers, modules, unreachable = failed,
         });
+    }
+
+    /// <summary>Every user of every client; the admin (created by Ayn) is flagged. Read-only: clients manage their own users.</summary>
+    private static async Task<IResult> AllUsersAsync(ControlStore control, IDb db, CancellationToken ct)
+    {
+        var (ok, failed) = await EachAsync(db, await ClientsAsync(control, null, ct), async (cl, conn) => new
+        {
+            users = await Rows(db, conn, f => f.Query("core.app_user").OrderBy("user_id"), ct),
+            roles = await Rows(db, conn, f => f.Query("core.role"), ct),
+            logins = await LoginRows(db, conn, DateTime.UtcNow.AddDays(-90), 5000, ct),
+        }, ct);
+        var items = ok.SelectMany(x =>
+        {
+            var roleNames = x.Value.roles.ToDictionary(r => (string)r["role_id"]!, r => (r.TryGetValue("name_en", out var n) ? n as string : null) ?? (string)r["role_id"]!);
+            var firstId = x.Value.users.Select(u => Convert.ToString(u["user_id"], CultureInfo.InvariantCulture)).FirstOrDefault();
+            return x.Value.users.Select(u =>
+            {
+                var uid = Convert.ToString(u["user_id"], CultureInfo.InvariantCulture);
+                var names = new[] { u["username"] as string, u["email"] as string, u["phone"] as string }.Where(v => !string.IsNullOrEmpty(v)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var last = x.Value.logins.Where(l => (bool)l["succeeded"]! && names.Contains((string)l["identifier"]!)).Select(l => Dt(l["attempted_at_utc"])).FirstOrDefault();
+                var roleId = (string?)u["role_id"] ?? "";
+                var isAdmin = roleId.Contains("owner", StringComparison.OrdinalIgnoreCase) || uid == firstId;
+                return new
+                {
+                    id = $"{x.Client.Id}-{uid}", clientId = x.Client.Id.ToString(CultureInfo.InvariantCulture), clientName = x.Client.Name,
+                    name = (u["name_en"] as string) ?? (u["name_ar"] as string), username = u["username"] as string, email = u["email"] as string, mobile = u["phone"] as string,
+                    role = roleNames.GetValueOrDefault(roleId, roleId), isAdmin, createdBy = uid == firstId ? "Ayn" : "Client",
+                    status = (u["status"] as string) ?? "active", lastLoginAt = last,
+                };
+            });
+        }).OrderBy(u => u.clientName).ThenByDescending(u => u.isAdmin).ThenBy(u => u.name).ToList();
+        return Results.Ok(new { items, unreachable = failed });
     }
 
     /* ------------------------------------------------------------------ create a database */
