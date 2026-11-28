@@ -48,6 +48,8 @@ jobs:
         run: |
           dotnet publish src/PosApi/PosApi.csproj -c Release -r win-x64 --self-contained false -o out /p:UseAppHost=false
           cp -r db-migrations out/db-migrations
+          # Version: major from the VERSION file (raise it by hand for a big release), minor = this build's number.
+          echo "$(tr -d '[:space:]' < VERSION).${{ github.run_number }}" > out/version.txt
           (cd out && zip -qr "../api-${{ steps.t.outputs.tag }}.zip" .)
       - uses: actions/upload-artifact@v4
         if: env.TARGET == 'windows'

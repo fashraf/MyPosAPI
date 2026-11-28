@@ -149,7 +149,7 @@ public static partial class ObservabilityEndpoints
             readAtUtc = now,
             app = new
             {
-                status = "operational", environment = env.EnvironmentName, version = typeof(ObservabilityEndpoints).Assembly.GetName().Version?.ToString(),
+                status = "operational", environment = env.EnvironmentName, version = PosApi.Common.AppVersion.Number,
                 startedAtUtc = Started, uptimeMinutes = Math.Round((now - Started).TotalMinutes), memoryMb = Math.Round(proc.WorkingSet64 / 1048576d),
                 threads = proc.Threads.Count, clients = clients.Count, clientsReachable = ok.Count,
             },
