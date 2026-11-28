@@ -59,9 +59,9 @@ public static partial class ObservabilityEndpoints
 
     /* ------------------------------------------------------------------ fan-out over client databases */
 
-    private sealed record ClientRef(long Id, string Name, TenantInfo Tenant);
+    internal sealed record ClientRef(long Id, string Name, TenantInfo Tenant);
 
-    private static async Task<List<ClientRef>> ClientsAsync(ControlStore control, long? only, CancellationToken ct)
+    internal static async Task<List<ClientRef>> ClientsAsync(ControlStore control, long? only, CancellationToken ct)
     {
         await using var c = await control.OpenAsync(ct);
         var q = control.Query(c).Query("control.tenant").Where("status", "<>", "setup");
@@ -71,7 +71,7 @@ public static partial class ObservabilityEndpoints
     }
 
     /// <summary>Runs the same read in every client's database (in parallel, 8 s each); a client that fails is skipped and named.</summary>
-    private static async Task<(List<(ClientRef Client, T Value)> Ok, List<object> Failed)> EachAsync<T>(IDb db, List<ClientRef> clients,
+    internal static async Task<(List<(ClientRef Client, T Value)> Ok, List<object> Failed)> EachAsync<T>(IDb db, List<ClientRef> clients,
         Func<ClientRef, DbConnection, Task<T>> read, CancellationToken ct)
     {
         var results = await Task.WhenAll(clients.Select(async cl =>
@@ -91,7 +91,7 @@ public static partial class ObservabilityEndpoints
                 results.Where(r => r.error is not null).Select(r => (object)new { clientId = r.cl.Id.ToString(CultureInfo.InvariantCulture), client = r.cl.Name, error = r.error }).ToList());
     }
 
-    private static async Task<List<IDictionary<string, object?>>> Rows(IDb db, DbConnection conn, Func<SqlKata.Execution.QueryFactory, SqlKata.Query> build, CancellationToken ct) =>
+    internal static async Task<List<IDictionary<string, object?>>> Rows(IDb db, DbConnection conn, Func<SqlKata.Execution.QueryFactory, SqlKata.Query> build, CancellationToken ct) =>
         (await build(db.Query(conn)).GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>().ToList();
 
     /* ------------------------------------------------------------------ system health */
@@ -453,7 +453,7 @@ public static partial class ObservabilityEndpoints
     /* ------------------------------------------------------------------ helpers */
 
     /// <summary>Sign-ins from each client's audit trail (LOGIN / LOGIN_FAILED), in the shape the screens read.</summary>
-    private static async Task<List<IDictionary<string, object?>>> LoginRows(IDb db, DbConnection conn, DateTime since, int take, CancellationToken ct)
+    internal static async Task<List<IDictionary<string, object?>>> LoginRows(IDb db, DbConnection conn, DateTime since, int take, CancellationToken ct)
     {
         var rows = await Rows(db, conn, f => f.Query("audit.audit_entry").WhereIn("action", new[] { "LOGIN", "LOGIN_FAILED" }).Where("occurred_at_utc", ">=", since)
             .Select("username", "action", "ip_address", "user_agent", "error_message", "occurred_at_utc").OrderByDesc("audit_id").Limit(take), ct);
@@ -468,10 +468,10 @@ public static partial class ObservabilityEndpoints
         (await control.Query(c).Query("control.tenant").Select("tenant_id", "name").GetAsync(cancellationToken: ct)).Cast<IDictionary<string, object?>>()
             .ToDictionary(r => Convert.ToInt64(r["tenant_id"]), r => (string)r["name"]!);
 
-    private static double Pct(List<double> sorted, double p) => sorted.Count == 0 ? 0 : Math.Round(sorted[Math.Min(sorted.Count - 1, (int)Math.Ceiling(p * sorted.Count) - 1)], 1);
-    private static DateTime? Dt(object? v) => v is DateTime d ? DateTime.SpecifyKind(d, DateTimeKind.Utc) : null;
-    private static string Route(string path) => Ids().Replace(path.Split('?')[0], "/{id}");
-    private static string Sql(string text) { var s = Spaces().Replace(text, " ").Trim(); return s.Length > 400 ? s[..400] + "…" : s; }
+    internal static double Pct(List<double> sorted, double p) => sorted.Count == 0 ? 0 : Math.Round(sorted[Math.Min(sorted.Count - 1, (int)Math.Ceiling(p * sorted.Count) - 1)], 1);
+    internal static DateTime? Dt(object? v) => v is DateTime d ? DateTime.SpecifyKind(d, DateTimeKind.Utc) : null;
+    internal static string Route(string path) => Ids().Replace(path.Split('?')[0], "/{id}");
+    internal static string Sql(string text) { var s = Spaces().Replace(text, " ").Trim(); return s.Length > 400 ? s[..400] + "…" : s; }
     private static string Kind(string sql) => sql.TrimStart().Split(' ', 2)[0].ToUpperInvariant() switch { "SELECT" or "WITH" => "read", "INSERT" or "UPDATE" or "DELETE" or "MERGE" => "write", _ => "other" };
     private static string? Device(string? ua) => ua is null ? null : ua.Contains("Android") ? "Android" : ua.Contains("iPhone") || ua.Contains("iPad") ? "iOS"
         : ua.Contains("Windows") ? "Windows" : ua.Contains("Mac OS") ? "Mac" : ua.Contains("Linux") ? "Linux" : "Other";

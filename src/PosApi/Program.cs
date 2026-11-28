@@ -222,6 +222,8 @@ try
     builder.Services.AddSingleton<PosApi.Tenancy.ClientMetrics>();
     builder.Services.AddSingleton<PosApi.Observability.ErrorLog>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<PosApi.Observability.ErrorLog>());
+    builder.Services.AddSingleton<PosApi.Observability.ServerSampler>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<PosApi.Observability.ServerSampler>());
     builder.Services.AddSingleton<PosApi.Features.OrderLight.OrderFeed>();   // new orders in memory, for the order light
     builder.Services.AddScoped<ILanguageContext, LanguageContext>();
 
@@ -399,6 +401,8 @@ try
     var app = builder.Build();
     app.UseForwardedHeaders();   // first: everything after it sees the real client address
     /* SaaS mode: which client (and so which database) this request is for, before anything reads a database. */
+    /* Requests per minute for the server load gauge. */
+    app.Use(async (context, next) => { await next(); PosApi.Observability.ServerSampler.CountRequest(context.Response.StatusCode); });
     app.UseMiddleware<PosApi.Tenancy.TenantResolutionMiddleware>();
 
     /*------------------------------------------------------------- pipeline */
@@ -536,6 +540,7 @@ try
     PosApi.Features.Access.BusinessEndpoints.MapBusinessEndpoints(app);
     PosApi.Features.SuperAdmin.ConsoleEndpoints.MapConsoleEndpoints(app);
     PosApi.Observability.ObservabilityEndpoints.MapObservabilityEndpoints(app);
+    PosApi.Observability.AynEndpoints.MapAynEndpoints(app);
     app.MapCustomerEndpoints();
     app.MapFinanceEndpoints();
     app.MapReferenceEndpoints();
