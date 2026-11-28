@@ -41,7 +41,9 @@ public sealed class AuditMiddleware
         // Static assets and the health checks would swamp the table.
         /* The order light polls every few seconds; logging each poll would bury the real activity. */
         if (!path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(PosApi.Features.OrderLight.OrderLightEndpoints.Path, StringComparison.OrdinalIgnoreCase))
+            || path.StartsWith(PosApi.Features.OrderLight.OrderLightEndpoints.Path, StringComparison.OrdinalIgnoreCase)
+            /* Front ends reporting errors and screens are not something the client did. */
+            || path.StartsWith("/api/telemetry", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);
             return;
