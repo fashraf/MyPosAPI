@@ -53,6 +53,13 @@ public static class AynEndpoints
         g.MapGet("/platform/devices", DevicesAsync);
         g.MapGet("/support/issues", IssuesAsync);
         g.MapGet("/find", FindAsync);
+        g.MapGet("/pulse", PulseAsync);
+        /* Sliding sign-in: Ayn renews its token every few minutes while open, so nobody is signed out mid-work. */
+        g.MapPost("/auth/renew", (ICurrentUser user, IJwtTokenService tokens) =>
+        {
+            var pair = tokens.Issue(user.UserId, user.Username, SuperAdminEndpoints.Role, ["sa.all"], []);
+            return Results.Ok(new { accessToken = pair.AccessToken, expiresAtUtc = pair.AccessExpiresAtUtc });
+        });
         g.MapGet("/admins", AdminsAsync);
         g.MapPost("/admins", CreateAdminAsync);
         g.MapPost("/admins/{adminId:long}/status", AdminStatusAsync);
@@ -637,6 +644,63 @@ public static class AynEndpoints
             title = (string)e["message"]!, category = (string)e["source"]!, priority = Convert.ToInt32(e["occurrences"]) > 20 ? "high" : Convert.ToInt32(e["occurrences"]) > 3 ? "medium" : "low",
             status = "open", openedAt = Dt(e["first_at_utc"]), updatedAt = Dt(e["last_at_utc"]), occurrences = Convert.ToInt32(e["occurrences"]),
         }));
+    }
+
+    /* ══════════════════════════════════════ pulse: the quick look (overview + floating circle) ══ */
+
+    private static async Task<IResult> PulseAsync(ControlStore control, IDb db, ServerSampler sampler, long? clientId, CancellationToken ct)
+    {
+        var today = DateTime.UtcNow.Date;
+        var hourAgo = DateTime.UtcNow.AddHours(-1);
+        var load = await sampler.ReadAsync(ct);
+        var clients = await ClientsAsync(control, clientId, ct);
+        var (ok, failed) = await EachAsync(db, clients, async (cl, conn) => new
+        {
+            lastOrder = (await Rows(db, conn, f => f.Query("sales.sale").Where("status", "<>", "voided").Select("invoice_no", "total_h", "cashier_name", "sold_at_utc", "order_type").OrderByDesc("sold_at_utc").Limit(1), ct)).FirstOrDefault(),
+            today = (await Rows(db, conn, f => f.Query("sales.sale").Where("sold_at_utc", ">=", today).Where("status", "<>", "voided").SelectRaw("COUNT(*) AS n, COALESCE(SUM(total_h),0) AS h"), ct)).First(),
+            logins = await LoginRows(db, conn, today, 5000, ct),
+            names = await Rows(db, conn, f => f.Query("core.app_user").Select("username", "email", "phone", "name_en"), ct),
+            failures = (await Rows(db, conn, f => f.Query("audit.request_timing").Where("occurred_at_utc", ">=", hourAgo).Where("status_code", ">=", 500).SelectRaw("COUNT(*) AS n"), ct)).First(),
+            open = (await Rows(db, conn, f => f.Query("sales.restaurant_session").WhereNull("closed_at_utc").SelectRaw("COUNT(*) AS n"), ct)).First(),
+        }, ct);
+        await using var c = await control.OpenAsync(ct);
+        var openErrors = await control.Query(c).Query("control.error_log").Where("resolved", false).Where("last_at_utc", ">=", hourAgo).CountAsync<int>(cancellationToken: ct);
+        string Name(IEnumerable<IDictionary<string, object?>> names, string? who) =>
+            names.FirstOrDefault(n => who is not null && (Eq(n["username"], who) || Eq(n["email"], who) || Eq(n["phone"], who)))?["name_en"] as string ?? who ?? "Name not recorded";
+        static bool Eq(object? a, string b) => a is string s && string.Equals(s, b, StringComparison.OrdinalIgnoreCase);
+        var lastOrder = ok.Where(x => x.Value.lastOrder is not null).Select(x => (x.Client, o: x.Value.lastOrder!)).OrderByDescending(x => Dt(x.o["sold_at_utc"])).FirstOrDefault();
+        var logins = ok.SelectMany(x => x.Value.logins.Select(l => (x.Client, l, name: Name(x.Value.names, l["identifier"] as string)))).OrderByDescending(x => Dt(x.l["attempted_at_utc"])).ToList();
+        var lastLogin = logins.FirstOrDefault(x => (bool)x.l["succeeded"]!);
+        var critical = new List<object>();
+        foreach (var f in failed) critical.Add(new { kind = "database", text = $"Cannot reach the database of {((dynamic)f).client}", detail = (string)((dynamic)f).error });
+        foreach (var x in ok.Where(x => L(x.Value.failures["n"]) > 0)) critical.Add(new { kind = "api", text = $"{x.Value.failures["n"]} server errors in the last hour at {x.Client.Name}", detail = "See Client → Failures" });
+        if (openErrors > 0) critical.Add(new { kind = "errors", text = $"{openErrors} new error(s) in the last hour", detail = "See Health → Errors" });
+        if (load.CpuPct >= 90 || load.MemoryPct >= 90 || load.DiskFreePct <= 8) critical.Add(new { kind = "server", text = $"Server under pressure: CPU {load.CpuPct}%, memory {load.MemoryPct}%, disk free {load.DiskFreePct}%", detail = "See Health → Usage" });
+        return Results.Ok(new
+        {
+            at = DateTime.UtcNow,
+            load = new { cpuPct = load.CpuPct, memoryPct = load.MemoryPct, diskUsedPct = Math.Round(100 - load.DiskFreePct, 1), dbConnections = load.DbConnections, requestsLastMinute = load.RequestsLastMinute },
+            ordersToday = ok.Sum(x => L(x.Value.today["n"])), salesTodayH = ok.Sum(x => L(x.Value.today["h"])),
+            usersSignedInToday = logins.Where(x => (bool)x.l["succeeded"]!).Select(x => $"{x.Client.Id}:{x.l["identifier"]}").Distinct().Count(),
+            failedSignInsToday = logins.Count(x => !(bool)x.l["succeeded"]!),
+            openSessions = ok.Sum(x => L(x.Value.open["n"])),
+            lastOrder = lastOrder.o is null ? null : new
+            {
+                clientId = Id(lastOrder.Client.Id), client = lastOrder.Client.Name, invoiceNo = L(lastOrder.o["invoice_no"]), totalH = L(lastOrder.o["total_h"]),
+                cashier = lastOrder.o["cashier_name"] as string, type = lastOrder.o["order_type"] as string, at = Dt(lastOrder.o["sold_at_utc"]),
+            },
+            lastLogin = lastLogin.l is null ? null : new { clientId = Id(lastLogin.Client.Id), client = lastLogin.Client.Name, user = lastLogin.name, login = lastLogin.l["identifier"] as string, at = Dt(lastLogin.l["attempted_at_utc"]), ip = lastLogin.l["ip_address"] as string },
+            critical,
+            clients = ok.Select(x => new
+            {
+                id = Id(x.Client.Id), name = x.Client.Name, ordersToday = L(x.Value.today["n"]), salesTodayH = L(x.Value.today["h"]),
+                signedInToday = x.Value.logins.Where(l => (bool)l["succeeded"]!).Select(l => l["identifier"]).Distinct().Count(),
+                openSessions = L(x.Value.open["n"]), serverErrorsLastHour = L(x.Value.failures["n"]),
+                lastOrderAt = x.Value.lastOrder is null ? null : Dt(x.Value.lastOrder["sold_at_utc"]),
+                active = L(x.Value.today["n"]) > 0 || x.Value.logins.Any(l => (bool)l["succeeded"]!),
+            }).OrderByDescending(x => x.ordersToday).ToList(),
+            unreachable = failed,
+        });
     }
 
     /* ══════════════════════════════════════ Ayn administrators ══ */

@@ -318,11 +318,20 @@ public static partial class ObservabilityEndpoints
     private static async Task<IResult> LoginsAsync(ControlStore control, IDb db, long? clientId, int? days, CancellationToken ct)
     {
         var since = DateTime.UtcNow.AddDays(-Math.Clamp(days ?? 7, 1, 90));
-        var (ok, failed) = await EachAsync(db, await ClientsAsync(control, clientId, ct), (cl, conn) => LoginRows(db, conn, since, 2000, ct), ct);
-        var items = ok.SelectMany(x => x.Value.Select(l => new
+        var (ok, failed) = await EachAsync(db, await ClientsAsync(control, clientId, ct), async (cl, conn) => new
         {
-            at = Dt(l["attempted_at_utc"]), client = x.Client.Name, clientId = x.Client.Id.ToString(CultureInfo.InvariantCulture), user = l["identifier"] as string,
-            ok = (bool)l["succeeded"]!, ip = l["ip_address"] as string, device = Device(l["user_agent"] as string), reason = l["reason"] as string,
+            rows = await LoginRows(db, conn, since, 2000, ct),
+            users = await Rows(db, conn, f => f.Query("core.app_user").Select("username", "email", "phone", "name_en", "role_id"), ct),
+        }, ct);
+        /* Who it was: the person's name from the client's users (matched on username, email or mobile), not the raw login. */
+        static IDictionary<string, object?>? Match(List<IDictionary<string, object?>> users, string? who) => who is null ? null :
+            users.FirstOrDefault(u => new[] { u["username"], u["email"], u["phone"] }.Any(v => v is string s && string.Equals(s, who, StringComparison.OrdinalIgnoreCase)));
+        var items = ok.SelectMany(x => x.Value.rows.Select(l => new { l, u = Match(x.Value.users, l["identifier"] as string) }).Select(p => new
+        {
+            at = Dt(p.l["attempted_at_utc"]), client = x.Client.Name, clientId = x.Client.Id.ToString(CultureInfo.InvariantCulture),
+            user = (p.u?["name_en"] as string) ?? ((p.l["identifier"] as string) is "(unknown)" or null ? "Name not recorded" : (string)p.l["identifier"]!),
+            login = p.l["identifier"] as string is "(unknown)" ? null : p.l["identifier"] as string, role = p.u?["role_id"] as string, known = p.u is not null,
+            ok = (bool)p.l["succeeded"]!, ip = p.l["ip_address"] as string, device = Device(p.l["user_agent"] as string), reason = p.l["reason"] as string,
         })).OrderByDescending(x => x.at).Take(1000);
         return Results.Ok(new { items, unreachable = failed });
     }
@@ -459,7 +468,7 @@ public static partial class ObservabilityEndpoints
             .Select("username", "action", "ip_address", "user_agent", "error_message", "occurred_at_utc").OrderByDesc("audit_id").Limit(take), ct);
         return rows.Select(r => (IDictionary<string, object?>)new Dictionary<string, object?>
         {
-            ["identifier"] = r["username"] ?? "(unknown)", ["succeeded"] = (string)r["action"]! == "LOGIN", ["ip_address"] = r["ip_address"],
+            ["identifier"] = r["username"], ["succeeded"] = (string)r["action"]! == "LOGIN", ["ip_address"] = r["ip_address"],
             ["user_agent"] = r["user_agent"], ["reason"] = r["error_message"], ["attempted_at_utc"] = r["occurred_at_utc"],
         }).ToList();
     }
