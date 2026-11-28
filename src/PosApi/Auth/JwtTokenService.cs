@@ -16,7 +16,7 @@ public sealed record TokenPair(
 public interface IJwtTokenService
 {
     TokenPair Issue(string userId, string username, string roleId, IEnumerable<string> permissions,
-                    IEnumerable<string> branchIds);
+                    IEnumerable<string> branchIds, TimeSpan? lifetime = null);
     string HashRefreshToken(string refreshToken);
 }
 
@@ -43,10 +43,11 @@ public sealed class JwtTokenService : IJwtTokenService
         string username,
         string roleId,
         IEnumerable<string> permissions,
-        IEnumerable<string> branchIds)
+        IEnumerable<string> branchIds,
+        TimeSpan? lifetime = null)
     {
         var now = DateTime.UtcNow;
-        var accessExpires = now.AddMinutes(_options.AccessTokenMinutes);
+        var accessExpires = now.Add(lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenMinutes));
 
         var claims = new List<Claim>
         {

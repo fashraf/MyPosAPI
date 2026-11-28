@@ -55,9 +55,9 @@ public static class AynEndpoints
         g.MapGet("/find", FindAsync);
         g.MapGet("/pulse", PulseAsync);
         /* Sliding sign-in: Ayn renews its token every few minutes while open, so nobody is signed out mid-work. */
-        g.MapPost("/auth/renew", (ICurrentUser user, IJwtTokenService tokens) =>
+        g.MapPost("/auth/renew", (ICurrentUser user, IJwtTokenService tokens, IConfiguration config) =>
         {
-            var pair = tokens.Issue(user.UserId, user.Username, SuperAdminEndpoints.Role, ["sa.all"], []);
+            var pair = tokens.Issue(user.UserId, user.Username, SuperAdminEndpoints.Role, ["sa.all"], [], SuperAdminEndpoints.AdminTokenLife(config));
             return Results.Ok(new { accessToken = pair.AccessToken, expiresAtUtc = pair.AccessExpiresAtUtc });
         });
         g.MapGet("/admins", AdminsAsync);

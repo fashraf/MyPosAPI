@@ -75,7 +75,7 @@ public static partial class SuperAdminEndpoints
         await control.Query(c).Query("control.admin_user").Where("admin_id", row["admin_id"]).UpdateAsync(
             new Dictionary<string, object?> { ["last_login_at_utc"] = DateTime.UtcNow }, cancellationToken: ct);
         TenantContext.Admin = true;
-        var pair = tokens.Issue(Convert.ToString(row["admin_id"])!, email, Role, ["sa.all"], []);
+        var pair = tokens.Issue(Convert.ToString(row["admin_id"])!, email, Role, ["sa.all"], [], AdminTokenLife(config));
         await control.LogAsync(null, "admin_login", null, email, ct);
         return Results.Ok(new
         {
@@ -372,6 +372,9 @@ public static partial class SuperAdminEndpoints
     private static string Tail(string text) => text.Length > 4000 ? text[^4000..] : text;
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     private static IResult NotFound() => Error(404, "not_found", "That client does not exist.", "هذا العميل غير موجود.");
+    /// <summary>How long an Ayn sign-in lasts before it must be renewed (Auth:AdminTokenHours, default 12). Renewing slides it forward.</summary>
+    internal static TimeSpan AdminTokenLife(IConfiguration config) => TimeSpan.FromHours(Math.Clamp(config.GetValue<double?>("Auth:AdminTokenHours") ?? 12, 0.5, 72));
+
     private static IResult Error(int status, string code, string en, string ar) =>
         Results.Json(new { code, message = en, messageEn = en, messageAr = ar }, statusCode: status);
 }
